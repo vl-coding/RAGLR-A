@@ -1,0 +1,34 @@
+data:
+  processed_path: "data/processed/arxiv_papers.jsonl"
+  raw_snapshot_path: "data/raw/arxiv-metadata-oai-snapshot.json"
+  min_year: null
+  max_papers: null
+  update_source: "oai_pmh"
+  oai_base_url: "https://oaipmh.arxiv.org/oai"
+  oai_metadata_prefix: "oai_dc"
+
+retrieval:
+  default_top_k: 10
+  max_top_k: 50
+  dense_candidates: 200
+  bm25_candidates: 200
+  rrf_k: 60
+  min_prefilter_candidates: 500
+  max_prefilter_candidates: 50000
+  target_reduction_min_percent: 86
+  target_reduction_max_percent: 99
+
+models:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  qwen_model: "Qwen/Qwen2.5-3B-Instruct"
+  claude_model: "claude-sonnet-4-6"
+
+paths:
+  taxonomy: "configs/arxiv_taxonomy.yaml"
+  dense_index_dir: "artifacts/dense_index"
+  bm25_index: "artifacts/bm25_index.pkl"
+  keyword_index: "artifacts/keyword_inverted_index.pkl"
+  manifest: "artifacts/manifest.json"
+  update_state: "artifacts/update_state.json"
+  logs_dir: "logs"
+  outputs_dir: "outputs"

@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+
+data/raw/
+data/processed/
+artifacts/
+logs/
+outputs/
+
+*.pkl
+*.sqlite3
+*.parquet
+*.jsonl
