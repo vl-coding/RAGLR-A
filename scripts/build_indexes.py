@@ -1,3 +1,5 @@
+import argparse
+
 from src.rag_lit.config import load_config, ensure_project_dirs
 from src.rag_lit.data_ingestion import load_papers_jsonl, write_manifest
 from src.rag_lit.dense_retriever import DenseRetriever
@@ -6,6 +8,14 @@ from src.rag_lit.keyword_index import build_keyword_inverted_index, save_keyword
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--skip-dense",
+        action="store_true",
+        help="Skip embedding/dense index (use after build_dense_index_fast.py)",
+    )
+    args = parser.parse_args()
+
     config = load_config()
     ensure_project_dirs(config)
 
@@ -13,12 +23,15 @@ def main():
 
     print(f"Loaded {len(papers)} papers.")
 
-    print("Building dense index...")
-    dense = DenseRetriever(
-        model_name=config["models"]["embedding_model"],
-        persist_dir=config["paths"]["dense_index_dir"],
-    )
-    dense.build_index(papers)
+    if not args.skip_dense:
+        print("Building dense index...")
+        dense = DenseRetriever(
+            model_name=config["models"]["embedding_model"],
+            persist_dir=config["paths"]["dense_index_dir"],
+        )
+        dense.build_index(papers)
+    else:
+        print("Skipping dense index (--skip-dense).")
 
     print("Building BM25 index...")
     bm25 = BM25Retriever()
