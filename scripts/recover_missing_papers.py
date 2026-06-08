@@ -175,21 +175,21 @@ def parse_oai_record(record: ET.Element) -> Optional[dict]:
     }
 
 
-def fetch_oai_xml(base_url: str, params: dict, max_retries: int = 5, sleep_seconds: float = 3.0) -> ET.Element:
+def fetch_oai_xml(base_url: str, params: dict, max_retries: int = 20, sleep_seconds: float = 3.0) -> ET.Element:
     url = base_url + "?" + urlencode(params)
     for attempt in range(1, max_retries + 1):
         try:
-            response = requests.get(url, timeout=60)
+            response = requests.get(url, timeout=120)
             if response.status_code == 200:
                 return ET.fromstring(response.content)
             if response.status_code in {429, 500, 502, 503, 504}:
-                wait = sleep_seconds * attempt
+                wait = min(sleep_seconds * attempt, 120)
                 print(f"  HTTP {response.status_code}, retrying in {wait:.1f}s...", flush=True)
                 time.sleep(wait)
                 continue
             raise RuntimeError(f"OAI request failed with status {response.status_code}")
         except requests.RequestException as e:
-            wait = sleep_seconds * attempt
+            wait = min(sleep_seconds * attempt, 120)
             print(f"  Request error ({e}), retrying in {wait:.1f}s...", flush=True)
             time.sleep(wait)
     raise RuntimeError(f"OAI request failed after {max_retries} attempts.")
