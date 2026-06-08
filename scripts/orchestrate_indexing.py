@@ -37,9 +37,13 @@ def log(msg: str) -> None:
 
 def file_contains(path: Path, marker: str) -> bool:
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        # PowerShell > redirect writes UTF-16 LE (BOM: ff fe); detect and decode correctly.
+        with open(path, "rb") as f:
+            bom = f.read(2)
+        encoding = "utf-16" if bom == b"\xff\xfe" else "utf-8"
+        with open(path, "r", encoding=encoding, errors="replace") as f:
             return any(marker in line for line in f)
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         return False
 
 
