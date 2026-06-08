@@ -121,7 +121,15 @@ def main() -> None:
             show_progress_bar=False,
         ).tolist()
 
-        collection.upsert(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
+        _CHROMA_MAX = 5_461  # chromadb Rust backend hard limit
+        for i in range(0, len(ids), _CHROMA_MAX):
+            sl = slice(i, i + _CHROMA_MAX)
+            collection.upsert(
+                ids=ids[sl],
+                documents=texts[sl],
+                embeddings=embeddings[sl],
+                metadatas=metadatas[sl],
+            )
 
         processed += len(chunk)
         elapsed = time.time() - start_wall
