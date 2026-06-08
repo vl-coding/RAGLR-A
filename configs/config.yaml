@@ -9,7 +9,7 @@ data:
 
 retrieval:
   default_top_k: 10
-  max_top_k: 50
+  top_k_options: [5, 10, 15, 20, 25]
   dense_candidates: 200
   bm25_candidates: 200
   rrf_k: 60
@@ -26,7 +26,7 @@ models:
 paths:
   taxonomy: "configs/arxiv_taxonomy.yaml"
   dense_index_dir: "artifacts/dense_index"
-  bm25_index: "artifacts/bm25_index.pkl"
+  bm25_index: "artifacts/bm25_index"
   keyword_index: "artifacts/keyword_inverted_index.pkl"
   manifest: "artifacts/manifest.json"
   update_state: "artifacts/update_state.json"

@@ -51,8 +51,8 @@ async def search(request: SearchRequest) -> SearchResponse:
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="query must not be empty")
 
-    if request.top_k < 1 or request.top_k > 50:
-        raise HTTPException(status_code=400, detail="top_k must be between 1 and 50")
+    if request.top_k not in (5, 10, 15, 20, 25):
+        raise HTTPException(status_code=400, detail="top_k must be one of 5, 10, 15, 20, 25")
 
     pipeline = get_pipeline()
 

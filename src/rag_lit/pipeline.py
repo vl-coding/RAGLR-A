@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
 from .schemas import SearchResponse, PaperResult, RetrievalTrace
@@ -61,7 +62,11 @@ class RagLiteraturePipeline:
         generated_keywords = []
 
         if use_qwen_prefilter:
-            generated_keywords = self.qwen.generate_keywords(query)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                qwen_future = executor.submit(self.qwen.generate_keywords, query)
+                hyde_future = executor.submit(self.hyde.generate, query)
+                generated_keywords = qwen_future.result()
+                hyde_document = hyde_future.result()
 
             keyword_candidate_ids = candidate_ids_from_keywords(
                 keywords=generated_keywords,
@@ -75,6 +80,7 @@ class RagLiteraturePipeline:
                 final_candidate_ids = field_filtered_ids
         else:
             final_candidate_ids = field_filtered_ids
+            hyde_document = self.hyde.generate(query)
 
         keyword_filtered = filter_by_candidate_ids(
             field_filtered,
@@ -82,8 +88,6 @@ class RagLiteraturePipeline:
         )
 
         keyword_filtered_size = len(keyword_filtered)
-
-        hyde_document = self.hyde.generate(query)
 
         dense_start = time.time()
         dense_results = self.dense.search(
@@ -106,19 +110,28 @@ class RagLiteraturePipeline:
             k=self.config["retrieval"]["rrf_k"],
         )
 
-        final_results = []
+        top_items = fused[:top_k]
 
-        for item in fused[:top_k]:
-            paper = self.paper_lookup[item["doc_id"]]
-
-            justification = {}
-            if use_claude_justification:
-                justification = self.justifier.justify(
+        justifications = {}
+        if use_claude_justification:
+            def _justify(item):
+                paper = self.paper_lookup[item["doc_id"]]
+                return item["doc_id"], self.justifier.justify(
                     query=query,
                     title=paper.title,
                     abstract=paper.abstract,
                 )
 
+            with ThreadPoolExecutor(max_workers=top_k) as executor:
+                futures = {executor.submit(_justify, item): item for item in top_items}
+                for future in as_completed(futures):
+                    doc_id, result = future.result()
+                    justifications[doc_id] = result
+
+        final_results = []
+        for item in top_items:
+            paper = self.paper_lookup[item["doc_id"]]
+            justification = justifications.get(item["doc_id"], {})
             final_results.append(
                 PaperResult(
                     rank=item["rank"],

@@ -52,10 +52,9 @@ selected_categories = st.multiselect(
 
 query = st.text_area("Enter your research question or partial draft")
 
-top_k = st.slider(
+top_k = st.select_slider(
     "How many papers should be returned?",
-    min_value=1,
-    max_value=50,
+    options=[5, 10, 15, 20, 25],
     value=10,
 )
 
