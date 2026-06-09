@@ -1,21 +1,34 @@
-# RAGLR-A — RAG Literature Review Assistant
+# RAGLR-A — RAG Literature Review Assistant (Demo)
 
-A domain-general arXiv retrieval system for academic literature review. RAGLR-A combines sparse and dense retrieval with LLM-powered query expansion and relevance justification to surface the most relevant papers from across the full arXiv taxonomy.
+A domain-general arXiv retrieval demo built to explore multi-stage RAG pipelines for academic literature search. RAGLR-A combines sparse and dense retrieval with LLM-powered query expansion and relevance justification to surface relevant papers from across the full arXiv taxonomy.
 
 ---
 
-## How it works
+## What's been built
 
-Each query passes through a multi-stage pipeline:
+### Core pipeline (complete)
+- **Field filter** — narrows the corpus to papers matching selected academic fields (e.g. Computer Science, Statistics, Physics)
+- **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
+- **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract representing an ideal result; this is used as the dense query vector
+- **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
+- **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
+- **Claude justifications** — for each top-k result, Claude Sonnet generates a structured relevance justification: contribution summary, relevance reasoning, and relevance/specificity scores (1–10)
+- **RetrievalTrace** — every response includes search-space reduction stats, latency breakdowns, and generated keywords
 
-1. **Field filter** — narrows the corpus to papers matching the selected academic fields (e.g. Computer Science, Statistics, Physics)
-2. **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, further reducing the candidate pool
-3. **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract that captures what an ideal result would look like; this is used as the dense query
-4. **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
-5. **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
-6. **Claude justifications** — for each top-k result, Claude Sonnet generates a structured relevance justification: contribution, relevance reasoning, and relevance/specificity scores (1–10)
+### Interfaces (complete)
+- **Streamlit UI** — interactive field/subcategory selection, query input, and results display
+- **FastAPI REST server** — `/search` and `/fields` endpoints with interactive docs
+- **CLI runner** — `scripts/run_query.py` for quick ad-hoc queries
 
-Every response includes a `RetrievalTrace` with search-space reduction stats, latency breakdowns, and the generated keywords.
+### Data pipeline (complete)
+- OAI-PMH harvester with incremental update support and recovery
+- JSONL preprocessing and multi-index build (dense, BM25, keyword)
+
+### Infrastructure improvements
+- Parallelized query pipeline (HyDE + dual retrieval run concurrently)
+- ChromaDB batch limit handling and indexing recovery pipeline
+- UTF-16 LE encoding support for log detection
+- Configurable `top_k` presets
 
 ---
 
