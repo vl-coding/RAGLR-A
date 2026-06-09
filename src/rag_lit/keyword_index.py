@@ -2,7 +2,7 @@ import re
 import pickle
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 
 from .schemas import Paper
 
@@ -33,6 +33,19 @@ def save_keyword_index(index: Dict[str, Set[str]], path: str) -> None:
 def load_keyword_index(path: str) -> Dict[str, Set[str]]:
     with open(path, "rb") as f:
         return pickle.load(f)
+
+
+def merge_new_papers_into_index(
+    index: Dict[str, Set[str]],
+    new_paper_tokens: List[Tuple[str, List[str]]],
+) -> None:
+    """Merge (arxiv_id, tokens) pairs into an existing index in-place."""
+    for arxiv_id, tokens in new_paper_tokens:
+        for token in set(tokens):
+            if token in index:
+                index[token].add(arxiv_id)
+            else:
+                index[token] = {arxiv_id}
 
 
 def candidate_ids_from_keywords(

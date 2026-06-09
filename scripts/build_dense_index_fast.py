@@ -18,7 +18,10 @@ Usage:
 import argparse
 import sys
 import time
+from pathlib import Path
 from typing import Generator, List
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.rag_lit.config import load_config, ensure_project_dirs
 from src.rag_lit.schemas import Paper
@@ -63,6 +66,11 @@ def main() -> None:
         choices=["onnx", "torch"],
         help="onnx uses ONNX Runtime (faster on CPU); torch uses PyTorch",
     )
+    parser.add_argument(
+        "--jsonl",
+        default=None,
+        help="Path to JSONL to index. Defaults to config data.processed_path.",
+    )
     args = parser.parse_args()
 
     from sentence_transformers import SentenceTransformer
@@ -71,7 +79,7 @@ def main() -> None:
     config = load_config()
     ensure_project_dirs(config)
 
-    jsonl_path = config["data"]["processed_path"]
+    jsonl_path = args.jsonl or config["data"]["processed_path"]
     model_name = config["models"]["embedding_model"]
     persist_dir = config["paths"]["dense_index_dir"]
 

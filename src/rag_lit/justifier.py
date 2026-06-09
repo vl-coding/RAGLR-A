@@ -1,6 +1,9 @@
 import os
 import json
+from pathlib import Path
 from anthropic import Anthropic
+
+_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
 class ClaudeJustifier:
@@ -8,37 +11,21 @@ class ClaudeJustifier:
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.model_name = model_name
 
+        template = (_PROMPTS_DIR / "claude_justifier_v1.txt").read_text(encoding="utf-8")
+        system_part, user_part = template.split("---", 1)
+        self._system = system_part.strip()
+        self._user_template = user_part.strip()
+
     def justify(self, query: str, title: str, abstract: str) -> dict:
-        prompt = f"""
-You are evaluating whether an academic paper is useful for a literature review.
-
-Return only valid JSON with these keys:
-- contribution
-- relevance_justification
-- relevance_score
-- specificity_score
-
-Scores should be from 1 to 10.
-
-User query:
-{query}
-
-Paper title:
-{title}
-
-Paper abstract:
-{abstract}
-"""
-
+        user_text = self._user_template.format(query=query, title=title, abstract=abstract)
         response = self.client.messages.create(
             model=self.model_name,
             max_tokens=450,
             temperature=0.1,
-            messages=[{"role": "user", "content": prompt}]
+            system=[{"type": "text", "text": self._system, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user_text}],
         )
-
         text = response.content[0].text.strip()
-
         try:
             return json.loads(text)
         except Exception:

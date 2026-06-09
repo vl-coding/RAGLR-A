@@ -1,24 +1,26 @@
 """
 Smoke tests for the pipeline using lightweight mocks.
 
-These tests verify the pipeline wiring without requiring real models,
-API keys, or a built index.
+Verifies pipeline wiring without requiring real models, API keys, or built indexes.
 """
-from typing import Any, Dict, List, Optional, Set
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.rag_lit.pipeline import RagLiteraturePipeline
+from src.rag_lit.pipeline import RagLiteraturePipeline, _PaperMeta
 from src.rag_lit.schemas import Paper, SearchResponse
 
 
 MINI_CONFIG = {
-    "data": {"processed_path": "data/processed/arxiv_papers.jsonl"},
+    "data": {
+        "processed_path": "data/processed/arxiv_papers.jsonl",
+        "delta_path": "data/processed/arxiv_delta.jsonl",
+    },
     "paths": {
         "keyword_index": "artifacts/keyword_inverted_index.pkl",
         "dense_index_dir": "artifacts/dense_index",
-        "bm25_index": "artifacts/bm25_index.pkl",
+        "bm25_index": "artifacts/bm25_index",
+        "bm25_delta": "artifacts/bm25_delta",
     },
     "models": {
         "qwen_model": "Qwen/Qwen2.5-3B-Instruct",
@@ -52,40 +54,82 @@ SAMPLE_PAPERS = [
     for i in range(1, 6)
 ]
 
+_SAMPLE_META = [_PaperMeta(p.arxiv_id, p.categories) for p in SAMPLE_PAPERS]
+_SAMPLE_OFFSETS = {p.arxiv_id: i * 100 for i, p in enumerate(SAMPLE_PAPERS)}
+_PAPER_LOOKUP = {p.arxiv_id: p for p in SAMPLE_PAPERS}
+
+
+def _make_retriever_results(papers):
+    dense = [
+        {"doc_id": p.arxiv_id, "rank": i + 1, "score": 0.9 - i * 0.1, "source": "dense"}
+        for i, p in enumerate(papers)
+    ]
+    bm25 = [
+        {"doc_id": p.arxiv_id, "rank": i + 1, "score": 10.0 - i, "source": "bm25"}
+        for i, p in enumerate(papers)
+    ]
+    return dense, bm25
+
 
 def _build_mock_pipeline() -> RagLiteraturePipeline:
+    """
+    Constructs a RagLiteraturePipeline with all I/O and model calls mocked out.
+
+    Patches that touch disk or the network (build_meta_index, load_keyword_index,
+    BM25Retriever.load, and the three model constructors) are applied only during
+    __init__ via context-manager patches.  Patches needed during run() (notably
+    _maybe_reload and _load_paper) are set as instance attributes after construction,
+    which survive the context-manager exit.
+    """
+    dense_results, bm25_results = _make_retriever_results(SAMPLE_PAPERS)
+
+    mock_qwen = MagicMock()
+    mock_qwen.generate_keywords.return_value = ["attention", "transformer"]
+
+    mock_hyde = MagicMock()
+    mock_hyde.generate.return_value = "A hypothetical abstract about AI."
+
+    mock_justifier = MagicMock()
+    mock_justifier.justify.return_value = {
+        "contribution": "Proposes a new method.",
+        "relevance_justification": "Directly relevant.",
+        "relevance_score": 9,
+        "specificity_score": 8,
+    }
+
+    mock_dense = MagicMock()
+    mock_dense.search.return_value = dense_results
+
+    mock_bm25 = MagicMock()
+    mock_bm25.search.return_value = bm25_results
+
     with (
-        patch("src.rag_lit.pipeline.load_papers_jsonl", return_value=SAMPLE_PAPERS),
+        patch.object(
+            RagLiteraturePipeline,
+            "_build_meta_index",
+            return_value=(_SAMPLE_META[:], dict(_SAMPLE_OFFSETS)),
+        ),
+        patch.object(RagLiteraturePipeline, "_load_delta_meta_from"),
         patch("src.rag_lit.pipeline.load_keyword_index", return_value={}),
-        patch("src.rag_lit.pipeline.QwenKeywordExtractor") as MockQwen,
-        patch("src.rag_lit.pipeline.ClaudeHyDE") as MockHyDE,
-        patch("src.rag_lit.pipeline.ClaudeJustifier") as MockJustifier,
-        patch("src.rag_lit.pipeline.DenseRetriever") as MockDense,
-        patch("src.rag_lit.pipeline.BM25Retriever") as MockBM25,
+        patch("src.rag_lit.pipeline.QwenKeywordExtractor", return_value=mock_qwen),
+        patch("src.rag_lit.pipeline.ClaudeHyDE", return_value=mock_hyde),
+        patch("src.rag_lit.pipeline.ClaudeJustifier", return_value=mock_justifier),
+        patch("src.rag_lit.pipeline.DenseRetriever", return_value=mock_dense),
+        patch("src.rag_lit.pipeline.BM25Retriever") as MockBM25Cls,
     ):
-        MockQwen.return_value.generate_keywords.return_value = ["attention", "transformer"]
-        MockHyDE.return_value.generate.return_value = "A hypothetical abstract about AI."
-        MockJustifier.return_value.justify.return_value = {
-            "contribution": "Proposes a new method.",
-            "relevance_justification": "Directly relevant.",
-            "relevance_score": 9,
-            "specificity_score": 8,
-        }
+        MockBM25Cls.load.return_value = mock_bm25
+        pipeline = RagLiteraturePipeline(MINI_CONFIG)
 
-        dense_results = [
-            {"doc_id": p.arxiv_id, "rank": i + 1, "score": 0.9 - i * 0.1, "source": "dense"}
-            for i, p in enumerate(SAMPLE_PAPERS)
-        ]
-        bm25_results = [
-            {"doc_id": p.arxiv_id, "rank": i + 1, "score": 10.0 - i, "source": "bm25"}
-            for i, p in enumerate(SAMPLE_PAPERS)
-        ]
+    # Patch instance methods that are called during run() (class-level patches expired above)
+    pipeline._maybe_reload = MagicMock()
+    pipeline._load_paper = MagicMock(side_effect=lambda aid: _PAPER_LOOKUP[aid])
 
-        MockDense.return_value.search.return_value = dense_results
-        MockBM25.load.return_value.search.return_value = bm25_results
+    return pipeline
 
-        return RagLiteraturePipeline(MINI_CONFIG)
 
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 
 def test_pipeline_returns_search_response():
     pipeline = _build_mock_pipeline()

@@ -6,7 +6,8 @@ runs the remaining pipeline steps once both finish:
 
     1. merge_recovered_papers.py       -- merge recovered JSONL into main
     2. build_dense_index_fast.py       -- index the recovered papers (idempotent)
-    3. build_indexes.py --skip-dense   -- build BM25 + keyword indexes
+    3a. build_bm25_index.py            -- build BM25 index          } run in
+    3b. build_keyword_index.py         -- build keyword index        } parallel
 
 Safe to run alongside the already-running jobs -- it only reads their log
 files and does not touch any data files until both jobs are confirmed done.
@@ -22,7 +23,12 @@ from pathlib import Path
 
 DENSE_LOG = Path("logs/build_dense.log")
 RECOVER_LOG = Path("logs/recover_papers.log")
+MERGE_LOG = Path("logs/merge.log")
+DENSE2_LOG = Path("logs/build_dense2.log")
+BM25_LOG = Path("logs/build_bm25.log")
+KEYWORD_LOG = Path("logs/build_keyword.log")
 ORCH_LOG = Path("logs/orchestrate.log")
+RECOVERED_JSONL = Path("data/processed/arxiv_recovered.jsonl")
 
 POLL_INTERVAL = 60  # seconds between log checks
 
@@ -47,15 +53,36 @@ def file_contains(path: Path, marker: str) -> bool:
         return False
 
 
-def run_step(label: str, cmd: list) -> None:
+def run_step(label: str, cmd: list, log_path: Path) -> None:
     log(f"Starting: {label}")
     log(f"Command:  {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=False)
+    log(f"Output:   {log_path}")
+    with open(log_path, "w") as out_f:
+        result = subprocess.run(cmd, stdout=out_f, stderr=subprocess.STDOUT)
     if result.returncode != 0:
         log(f"FAILED (exit {result.returncode}): {label}")
         log("Aborting orchestration. Fix the error and re-run remaining steps manually.")
         sys.exit(result.returncode)
     log(f"Finished: {label}")
+
+
+def run_parallel(steps: list) -> None:
+    """Launch multiple (label, cmd, log_path) steps as subprocesses and wait for all."""
+    procs = []
+    for label, cmd, log_path in steps:
+        log(f"Starting (parallel): {label}")
+        log(f"Command:             {' '.join(cmd)}")
+        with open(log_path, "w") as out_f:
+            proc = subprocess.Popen(cmd, stdout=out_f, stderr=subprocess.STDOUT)
+        procs.append((label, proc))
+
+    for label, proc in procs:
+        proc.wait()
+        if proc.returncode != 0:
+            log(f"FAILED (exit {proc.returncode}): {label}")
+            log("Aborting orchestration. Fix the error and re-run remaining steps manually.")
+            sys.exit(proc.returncode)
+        log(f"Finished: {label}")
 
 
 def wait_for(log_path: Path, marker: str, label: str) -> None:
@@ -82,17 +109,28 @@ def main() -> None:
     run_step(
         "merge_recovered_papers.py",
         [sys.executable, "scripts/merge_recovered_papers.py"],
+        MERGE_LOG,
     )
 
     run_step(
         "build_dense_index_fast.py (recovered papers)",
-        [sys.executable, "scripts/build_dense_index_fast.py", "--backend", "torch"],
+        [sys.executable, "scripts/build_dense_index_fast.py", "--backend", "torch",
+         "--jsonl", str(RECOVERED_JSONL)],
+        DENSE2_LOG,
     )
 
-    run_step(
-        "build_indexes.py --skip-dense (BM25 + keyword)",
-        [sys.executable, "scripts/build_indexes.py", "--skip-dense"],
-    )
+    run_parallel([
+        (
+            "build_bm25_index.py",
+            [sys.executable, "scripts/build_bm25_index.py"],
+            BM25_LOG,
+        ),
+        (
+            "build_keyword_index.py",
+            [sys.executable, "scripts/build_keyword_index.py"],
+            KEYWORD_LOG,
+        ),
+    ])
 
     log("=== All steps complete. Indexing pipeline finished. ===")
 

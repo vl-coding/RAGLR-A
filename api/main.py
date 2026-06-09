@@ -2,14 +2,18 @@ import os
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.rag_lit.config import load_config
 from src.rag_lit.pipeline import RagLiteraturePipeline
+from src.rag_lit.rate_limiter import RateLimiter
 from src.rag_lit.schemas import SearchResponse
 
 load_dotenv()
+
+config = load_config()
 
 app = FastAPI(
     title="RAG Literature Review Assistant",
@@ -18,14 +22,32 @@ app = FastAPI(
 )
 
 _pipeline: Optional[RagLiteraturePipeline] = None
+_limiter: Optional[RateLimiter] = None
 
 
 def get_pipeline() -> RagLiteraturePipeline:
     global _pipeline
     if _pipeline is None:
-        config = load_config()
         _pipeline = RagLiteraturePipeline(config)
     return _pipeline
+
+
+def get_limiter() -> RateLimiter:
+    global _limiter
+    if _limiter is None:
+        demo = config.get("demo", {})
+        _limiter = RateLimiter(
+            max_requests=demo.get("rate_limit_requests", 10),
+            window_seconds=demo.get("rate_limit_window_seconds", 3600),
+        )
+    return _limiter
+
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 class SearchRequest(BaseModel):
@@ -39,6 +61,7 @@ class SearchRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event() -> None:
     get_pipeline()
+    get_limiter()
 
 
 @app.get("/health")
@@ -46,28 +69,53 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/limit")
+async def limit_status(request: Request) -> dict:
+    limiter = get_limiter()
+    demo = config.get("demo", {})
+    ip = client_ip(request)
+    return {
+        "remaining": limiter.remaining(ip),
+        "limit": demo.get("rate_limit_requests", 10),
+        "window_seconds": demo.get("rate_limit_window_seconds", 3600),
+    }
+
+
 @app.post("/search", response_model=SearchResponse)
-async def search(request: SearchRequest) -> SearchResponse:
-    if not request.query.strip():
+async def search(request: Request, body: SearchRequest) -> SearchResponse:
+    if not body.query.strip():
         raise HTTPException(status_code=400, detail="query must not be empty")
 
-    if request.top_k not in (5, 10, 15, 20, 25):
+    if body.top_k not in (5, 10, 15, 20, 25):
         raise HTTPException(status_code=400, detail="top_k must be one of 5, 10, 15, 20, 25")
 
-    pipeline = get_pipeline()
+    limiter = get_limiter()
+    ip = client_ip(request)
 
+    if not limiter.is_allowed(ip):
+        demo = config.get("demo", {})
+        limit = demo.get("rate_limit_requests", 10)
+        message = demo.get("limit_message", "Free demo limit reached — {limit} queries per hour.").format(limit=limit)
+        retry_after = limiter.retry_after(ip)
+        headers = {"Retry-After": str(retry_after)} if retry_after else {}
+        return JSONResponse(
+            status_code=429,
+            content={"detail": message, "retry_after_seconds": retry_after},
+            headers=headers,
+        )
+
+    pipeline = get_pipeline()
     return pipeline.run(
-        query=request.query,
-        selected_fields=request.selected_fields,
-        top_k=request.top_k,
-        use_qwen_prefilter=request.use_qwen_prefilter,
-        use_claude_justification=request.use_claude_justification,
+        query=body.query,
+        selected_fields=body.selected_fields,
+        top_k=body.top_k,
+        use_qwen_prefilter=body.use_qwen_prefilter,
+        use_claude_justification=body.use_claude_justification,
     )
 
 
 @app.get("/fields")
 async def list_fields() -> dict:
-    config = load_config()
     return {
         key: data["label"]
         for key, data in config["academic_fields"].items()

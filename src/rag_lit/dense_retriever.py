@@ -59,12 +59,10 @@ class DenseRetriever:
 
         candidate_set = set(candidate_ids) if candidate_ids else None
 
-        # Query a larger pool then post-filter by candidate_ids since chromadb
-        # does not support efficient set-based ID filtering in query().
-        if candidate_set:
-            n_query = min(total, max(top_n * 5, len(candidate_set)))
-        else:
-            n_query = min(total, top_n)
+        # Fetch top_n * 50 results and post-filter by candidate_ids.
+        # Embedding ranking surfaces relevant papers near the top, so a fixed
+        # multiplier is safe and avoids the OOM of fetching len(candidate_set) results.
+        n_query = min(total, top_n * 50 if candidate_set else top_n)
 
         results = self.collection.query(
             query_embeddings=[query_embedding],

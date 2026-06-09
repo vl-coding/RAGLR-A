@@ -1,5 +1,6 @@
 data:
   processed_path: "data/processed/arxiv_papers.jsonl"
+  delta_path: "data/processed/arxiv_delta.jsonl"
   raw_snapshot_path: "data/raw/arxiv-metadata-oai-snapshot.json"
   min_year: null
   max_papers: null
@@ -23,11 +24,18 @@ models:
   qwen_model: "Qwen/Qwen2.5-3B-Instruct"
   claude_model: "claude-sonnet-4-6"
 
+demo:
+  rate_limit_requests: 10
+  rate_limit_window_seconds: 3600
+  limit_message: "Free demo limit reached — {limit} queries per hour. Full access coming soon."
+
 paths:
   taxonomy: "configs/arxiv_taxonomy.yaml"
   dense_index_dir: "artifacts/dense_index"
   bm25_index: "artifacts/bm25_index"
+  bm25_delta: "artifacts/bm25_delta"
   keyword_index: "artifacts/keyword_inverted_index.pkl"
+  known_ids: "artifacts/known_ids.npy"
   manifest: "artifacts/manifest.json"
   update_state: "artifacts/update_state.json"
   logs_dir: "logs"

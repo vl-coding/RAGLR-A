@@ -7,7 +7,7 @@ requests
 
 sentence-transformers
 chromadb
-rank-bm25
+bm25s
 transformers
 torch
 accelerate

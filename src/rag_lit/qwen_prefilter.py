@@ -1,7 +1,10 @@
 import json
+from pathlib import Path
 from typing import List
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+
+_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
 class QwenKeywordExtractor:
@@ -12,17 +15,10 @@ class QwenKeywordExtractor:
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto"
         )
+        self._prompt_template = (_PROMPTS_DIR / "qwen_keywords_v1.txt").read_text(encoding="utf-8").strip()
 
     def generate_keywords(self, query: str, max_keywords: int = 18) -> List[str]:
-        prompt = f"""
-Extract {max_keywords} concise academic search keywords or phrases from the query below.
-
-Return only a JSON list of strings.
-Do not include explanations.
-
-Query:
-{query}
-"""
+        prompt = self._prompt_template.format(max_keywords=max_keywords, query=query)
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
