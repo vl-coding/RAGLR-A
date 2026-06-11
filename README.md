@@ -8,6 +8,8 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 ![RAG Literature Review Assistant — Streamlit UI](docs/images/streamlit_demo.png)
 
+[Full results page (PDF)](docs/images/streamlit_demo_full.pdf) — shows all 5 ranked papers with relevance justifications, contributions, and scores for the same query.
+
 This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-3B model for keyword extraction. On CPU, a single query takes roughly **2 minutes end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes + a 3B-parameter model warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
 
 Instead, this README documents the architecture and how to run it locally — see [Running it yourself](#running-it-yourself) below.
