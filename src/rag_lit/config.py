@@ -12,6 +12,7 @@ def load_config(config_path: str = "configs/config.yaml") -> dict:
         taxonomy = yaml.safe_load(f)
 
     config["academic_fields"] = taxonomy["fields"]
+    config["category_labels"] = taxonomy.get("category_labels", {})
     return config
 
 
@@ -22,7 +23,7 @@ def ensure_project_dirs(config: dict) -> None:
         if key in paths:
             Path(paths[key]).mkdir(parents=True, exist_ok=True)
 
-    for key in ("bm25_index", "keyword_index", "manifest", "update_state"):
+    for key in ("bm25_index", "keyword_index", "metadata_db", "manifest", "update_state"):
         if key in paths:
             Path(paths[key]).parent.mkdir(parents=True, exist_ok=True)
 

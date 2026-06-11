@@ -17,7 +17,8 @@ MINI_CONFIG = {
         "delta_path": "data/processed/arxiv_delta.jsonl",
     },
     "paths": {
-        "keyword_index": "artifacts/keyword_inverted_index.pkl",
+        "keyword_index": "artifacts/keyword_index.sqlite3",
+        "metadata_db": "artifacts/metadata.sqlite3",
         "dense_index_dir": "artifacts/dense_index",
         "bm25_index": "artifacts/bm25_index",
         "bm25_delta": "artifacts/bm25_delta",
@@ -75,7 +76,7 @@ def _build_mock_pipeline() -> RagLiteraturePipeline:
     """
     Constructs a RagLiteraturePipeline with all I/O and model calls mocked out.
 
-    Patches that touch disk or the network (build_meta_index, load_keyword_index,
+    Patches that touch disk or the network (build_meta_index, open_keyword_index_db,
     BM25Retriever.load, and the three model constructors) are applied only during
     __init__ via context-manager patches.  Patches needed during run() (notably
     _maybe_reload and _load_paper) are set as instance attributes after construction,
@@ -103,6 +104,9 @@ def _build_mock_pipeline() -> RagLiteraturePipeline:
     mock_bm25 = MagicMock()
     mock_bm25.search.return_value = bm25_results
 
+    mock_kw_conn = MagicMock()
+    mock_kw_conn.execute.return_value.fetchone.return_value = None
+
     with (
         patch.object(
             RagLiteraturePipeline,
@@ -110,7 +114,7 @@ def _build_mock_pipeline() -> RagLiteraturePipeline:
             return_value=(_SAMPLE_META[:], dict(_SAMPLE_OFFSETS)),
         ),
         patch.object(RagLiteraturePipeline, "_load_delta_meta_from"),
-        patch("src.rag_lit.pipeline.load_keyword_index", return_value={}),
+        patch("src.rag_lit.pipeline.open_keyword_index_db", return_value=mock_kw_conn),
         patch("src.rag_lit.pipeline.QwenKeywordExtractor", return_value=mock_qwen),
         patch("src.rag_lit.pipeline.ClaudeHyDE", return_value=mock_hyde),
         patch("src.rag_lit.pipeline.ClaudeJustifier", return_value=mock_justifier),
@@ -120,9 +124,10 @@ def _build_mock_pipeline() -> RagLiteraturePipeline:
         MockBM25Cls.load.return_value = mock_bm25
         pipeline = RagLiteraturePipeline(MINI_CONFIG)
 
-    # Patch instance methods that are called during run() (class-level patches expired above)
+    # Patch instance methods/attributes used during run() (class-level patches expired above)
     pipeline._maybe_reload = MagicMock()
     pipeline._load_paper = MagicMock(side_effect=lambda aid: _PAPER_LOOKUP[aid])
+    pipeline._qwen = mock_qwen
 
     return pipeline
 

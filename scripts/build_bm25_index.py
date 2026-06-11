@@ -1,3 +1,4 @@
+import argparse
 import json
 import sys
 import time
@@ -13,7 +14,6 @@ from src.rag_lit.keyword_index import tokenize
 
 
 def stream_papers(path: str):
-    """Yield (arxiv_id, text) tuples from JSONL without loading all papers."""
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -27,6 +27,16 @@ def stream_papers(path: str):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--max-papers",
+        type=int,
+        default=None,
+        help="Index only the N most recent papers (by arxiv_id). "
+             "Use ~1_000_000 if RAM is limited (3M papers requires ~6GB free RAM).",
+    )
+    args = parser.parse_args()
+
     t0 = time.time()
     config = load_config()
     ensure_project_dirs(config)
@@ -34,14 +44,35 @@ def main():
     jsonl_path = config["data"]["processed_path"]
     print(f"Streaming papers from {jsonl_path} ...", flush=True)
 
+    all_papers = []
+    for i, (arxiv_id, text) in enumerate(stream_papers(jsonl_path)):
+        all_papers.append((arxiv_id, text))
+        if (i + 1) % 200_000 == 0:
+            print(f"  Read {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
+
+    # Sort by arxiv_id descending so --max-papers selects the most recent.
+    # arxiv IDs are zero-padded and encode submission date, so lexicographic
+    # sort is chronological.
+    all_papers.sort(key=lambda x: x[0], reverse=True)
+
+    if args.max_papers and args.max_papers < len(all_papers):
+        print(
+            f"Keeping {args.max_papers:,} most recent papers "
+            f"(dropped {len(all_papers) - args.max_papers:,} older papers)",
+            flush=True,
+        )
+        all_papers = all_papers[: args.max_papers]
+
+    print(f"Tokenizing {len(all_papers):,} papers ...", flush=True)
     arxiv_ids = []
     corpus_tokens = []
-    for i, (arxiv_id, text) in enumerate(stream_papers(jsonl_path)):
+    for i, (arxiv_id, text) in enumerate(all_papers):
         arxiv_ids.append(arxiv_id)
         corpus_tokens.append(tokenize(text))
         if (i + 1) % 100_000 == 0:
             print(f"  Tokenized {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
 
+    del all_papers
     print(f"Loaded {len(arxiv_ids):,} papers in {time.time()-t0:.1f}s", flush=True)
 
     print("Building BM25 index ...", flush=True)

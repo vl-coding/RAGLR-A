@@ -9,7 +9,7 @@ data:
   oai_metadata_prefix: "oai_dc"
 
 retrieval:
-  default_top_k: 10
+  default_top_k: 5
   top_k_options: [5, 10, 15, 20, 25]
   dense_candidates: 200
   bm25_candidates: 200
@@ -21,11 +21,11 @@ retrieval:
 
 models:
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-  qwen_model: "Qwen/Qwen2.5-3B-Instruct"
+  qwen_model: "Qwen/Qwen2.5-0.5B-Instruct"
   claude_model: "claude-sonnet-4-6"
 
 demo:
-  rate_limit_requests: 10
+  rate_limit_requests: 3
   rate_limit_window_seconds: 3600
   limit_message: "Free demo limit reached — {limit} queries per hour. Full access coming soon."
 
@@ -34,7 +34,8 @@ paths:
   dense_index_dir: "artifacts/dense_index"
   bm25_index: "artifacts/bm25_index"
   bm25_delta: "artifacts/bm25_delta"
-  keyword_index: "artifacts/keyword_inverted_index.pkl"
+  keyword_index: "artifacts/keyword_index.sqlite3"
+  metadata_db: "artifacts/metadata.sqlite3"
   known_ids: "artifacts/known_ids.npy"
   manifest: "artifacts/manifest.json"
   update_state: "artifacts/update_state.json"

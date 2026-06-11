@@ -8,6 +8,7 @@ runs the remaining pipeline steps once both finish:
     2. build_dense_index_fast.py       -- index the recovered papers (idempotent)
     3a. build_bm25_index.py            -- build BM25 index          } run in
     3b. build_keyword_index.py         -- build keyword index        } parallel
+    3c. build_metadata_db.py           -- build SQLite metadata index }
 
 Safe to run alongside the already-running jobs -- it only reads their log
 files and does not touch any data files until both jobs are confirmed done.
@@ -27,6 +28,7 @@ MERGE_LOG = Path("logs/merge.log")
 DENSE2_LOG = Path("logs/build_dense2.log")
 BM25_LOG = Path("logs/build_bm25.log")
 KEYWORD_LOG = Path("logs/build_keyword.log")
+METADATA_DB_LOG = Path("logs/build_metadata_db.log")
 ORCH_LOG = Path("logs/orchestrate.log")
 RECOVERED_JSONL = Path("data/processed/arxiv_recovered.jsonl")
 
@@ -129,6 +131,11 @@ def main() -> None:
             "build_keyword_index.py",
             [sys.executable, "scripts/build_keyword_index.py"],
             KEYWORD_LOG,
+        ),
+        (
+            "build_metadata_db.py",
+            [sys.executable, "scripts/build_metadata_db.py"],
+            METADATA_DB_LOG,
         ),
     ])
 

@@ -3,7 +3,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Set
+from typing import Callable, Dict, List, NamedTuple, Optional, Set
 
 from .schemas import Paper, SearchResponse, PaperResult, RetrievalTrace
 from .preprocessing import (
@@ -11,7 +11,8 @@ from .preprocessing import (
     filter_by_candidate_ids,
     reduction_percent,
 )
-from .keyword_index import load_keyword_index, candidate_ids_from_keywords
+from .keyword_index import open_keyword_index_db, candidate_ids_from_keywords
+from .metadata_db import build_metadata_db, load_metadata_db
 from .qwen_prefilter import QwenKeywordExtractor
 from .hyde import ClaudeHyDE
 from .bm25_retriever import BM25Retriever
@@ -33,8 +34,11 @@ class RagLiteraturePipeline:
         self._jsonl_path = config["data"]["processed_path"]
         self._delta_jsonl_path = config["data"].get("delta_path", "")
 
-        print("Building metadata index ...", flush=True)
-        self._all_meta, self._main_offsets = self._build_meta_index(self._jsonl_path)
+        print("Loading metadata index ...", flush=True)
+        self._metadata_db_path = config["paths"]["metadata_db"]
+        self._all_meta, self._main_offsets = self._build_meta_index(
+            self._jsonl_path, self._metadata_db_path
+        )
         self._delta_offsets: Dict[str, int] = {}
         self._delta_ids: Set[str] = set()
         self._delta_read_pos: int = 0  # bytes consumed from delta JSONL so far
@@ -44,7 +48,7 @@ class RagLiteraturePipeline:
 
         print(f"Metadata index ready: {len(self._all_meta):,} papers", flush=True)
 
-        self.keyword_index = load_keyword_index(config["paths"]["keyword_index"])
+        self.keyword_index = open_keyword_index_db(config["paths"]["keyword_index"])
         kw_path = Path(config["paths"]["keyword_index"])
         self._kw_mtime = kw_path.stat().st_mtime if kw_path.exists() else 0.0
 
@@ -61,7 +65,8 @@ class RagLiteraturePipeline:
             else 0.0
         )
 
-        self.qwen = QwenKeywordExtractor(config["models"]["qwen_model"])
+        self._qwen_model_name = config["models"]["qwen_model"]
+        self._qwen: Optional[QwenKeywordExtractor] = None
         self.hyde = ClaudeHyDE(config["models"]["claude_model"])
         self.justifier = ClaudeJustifier(config["models"]["claude_model"])
 
@@ -77,23 +82,29 @@ class RagLiteraturePipeline:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_meta_index(jsonl_path: str):
-        meta: List[_PaperMeta] = []
-        offsets: Dict[str, int] = {}
-        with open(jsonl_path, "rb") as f:
-            while True:
-                offset = f.tell()
-                line = f.readline()
-                if not line:
-                    break
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                obj = json.loads(stripped)
-                arxiv_id = obj.get("arxiv_id", "")
-                categories = obj.get("categories", [])
-                meta.append(_PaperMeta(arxiv_id, categories))
-                offsets[arxiv_id] = offset
+    def _build_meta_index(jsonl_path: str, db_path: str):
+        """Load (arxiv_id, categories, byte offset) for every paper.
+
+        Reads from a SQLite metadata DB (built once, persisted on disk) so
+        startup is a single bulk SELECT instead of json.loads-ing every line
+        of a multi-GB JSONL file. The DB is (re)built automatically if it's
+        missing or older than the JSONL it was built from -- run
+        scripts/build_metadata_db.py ahead of time to avoid paying that cost
+        on a live session.
+        """
+        db_file = Path(db_path)
+        jsonl_mtime = Path(jsonl_path).stat().st_mtime
+        if not db_file.exists() or db_file.stat().st_mtime < jsonl_mtime:
+            print(
+                f"Metadata DB at {db_path} is missing or stale -- rebuilding "
+                f"from {jsonl_path} (one-time cost; future sessions load "
+                f"this DB directly).",
+                flush=True,
+            )
+            build_metadata_db(jsonl_path, db_path)
+
+        rows, offsets = load_metadata_db(db_path)
+        meta = [_PaperMeta(arxiv_id, categories) for arxiv_id, categories in rows]
         return meta, offsets
 
     def _load_delta_meta_from(self, byte_pos: int) -> None:
@@ -160,7 +171,8 @@ class RagLiteraturePipeline:
         with self._reload_lock:
             # Re-check under lock (double-checked locking)
             if kw_path.stat().st_mtime > self._kw_mtime:
-                self.keyword_index = load_keyword_index(str(kw_path))
+                self.keyword_index.close()
+                self.keyword_index = open_keyword_index_db(str(kw_path))
                 self._kw_mtime = kw_path.stat().st_mtime
 
             if delta_bm25_path.exists() and delta_bm25_path.stat().st_mtime > self._delta_bm25_mtime:
@@ -186,32 +198,43 @@ class RagLiteraturePipeline:
         top_k: int = 10,
         use_qwen_prefilter: bool = True,
         use_claude_justification: bool = True,
+        custom_categories: Optional[List[str]] = None,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
     ) -> SearchResponse:
+        def _report(step: str, fraction: float) -> None:
+            if progress_callback is not None:
+                progress_callback(step, fraction)
+
         self._maybe_reload()
 
         start_total = time.time()
         total_corpus_size = len(self._all_meta)
 
+        _report("Filtering papers by academic field ...", 0.05)
         field_filtered = filter_by_academic_fields(
             self._all_meta,
             selected_fields,
             self.config,
+            category_override=custom_categories,
         )
         field_filtered_size = len(field_filtered)
         field_filtered_ids = {paper.arxiv_id for paper in field_filtered}
 
         generated_keywords = []
 
+        _report("Generating search keywords and hypothetical document ...", 0.15)
         if use_qwen_prefilter:
+            if self._qwen is None:
+                self._qwen = QwenKeywordExtractor(self._qwen_model_name)
             with ThreadPoolExecutor(max_workers=2) as executor:
-                qwen_future = executor.submit(self.qwen.generate_keywords, query)
+                qwen_future = executor.submit(self._qwen.generate_keywords, query)
                 hyde_future = executor.submit(self.hyde.generate, query)
                 generated_keywords = qwen_future.result()
                 hyde_document = hyde_future.result()
 
             keyword_candidate_ids = candidate_ids_from_keywords(
                 keywords=generated_keywords,
-                keyword_index=self.keyword_index,
+                conn=self.keyword_index,
                 mode="union",
             )
             final_candidate_ids = field_filtered_ids & keyword_candidate_ids
@@ -222,9 +245,11 @@ class RagLiteraturePipeline:
             final_candidate_ids = field_filtered_ids
             hyde_document = self.hyde.generate(query)
 
+        _report("Filtering candidates by keywords ...", 0.35)
         keyword_filtered = filter_by_candidate_ids(field_filtered, final_candidate_ids)
         keyword_filtered_size = len(keyword_filtered)
 
+        _report("Running dense vector search ...", 0.45)
         dense_start = time.time()
         dense_results = self.dense.search(
             query_text=hyde_document,
@@ -233,6 +258,7 @@ class RagLiteraturePipeline:
         )
         dense_latency = time.time() - dense_start
 
+        _report("Running BM25 keyword search ...", 0.6)
         bm25_start = time.time()
         top_n = self.config["retrieval"]["bm25_candidates"]
 
@@ -260,6 +286,7 @@ class RagLiteraturePipeline:
 
         bm25_latency = time.time() - bm25_start
 
+        _report("Fusing rankings (RRF) ...", 0.75)
         ranked_lists = [dense_results, bm25_results]
         if bm25_delta_results:
             ranked_lists.append(bm25_delta_results)
@@ -267,10 +294,13 @@ class RagLiteraturePipeline:
         fused = reciprocal_rank_fusion(ranked_lists, k=self.config["retrieval"]["rrf_k"])
         top_items = fused[:top_k]
 
+        _report("Loading paper details ...", 0.8)
         top_papers = {item["doc_id"]: self._load_paper(item["doc_id"]) for item in top_items}
 
         justifications = {}
         if use_claude_justification:
+            _report("Generating relevance justifications ...", 0.9)
+
             def _justify(item):
                 paper = top_papers[item["doc_id"]]
                 return item["doc_id"], self.justifier.justify(
@@ -326,6 +356,8 @@ class RagLiteraturePipeline:
             bm25_latency_seconds=round(bm25_latency, 3),
             total_latency_seconds=round(time.time() - start_total, 3),
         )
+
+        _report("Done", 1.0)
 
         return SearchResponse(
             query=query,

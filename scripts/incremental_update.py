@@ -41,7 +41,7 @@ import numpy as np
 from src.rag_lit.config import load_config, ensure_project_dirs
 from src.rag_lit.schemas import Paper
 from src.rag_lit.bm25_retriever import BM25Retriever
-from src.rag_lit.keyword_index import load_keyword_index, save_keyword_index, merge_new_papers_into_index, tokenize
+from src.rag_lit.keyword_index import merge_new_papers_into_index_db, tokenize
 from src.rag_lit.dense_retriever import DenseRetriever
 from update_arxiv_data import harvest_oai_records, load_state, save_state, utc_now_iso
 
@@ -107,8 +107,8 @@ def papers_to_jsonl_lines(papers: list) -> list:
                 categories=p.get("categories", []),
                 year=p.get("year", 0),
                 url=p.get("url"),
-                published_date=p.get("published_date"),
-                updated_date=p.get("updated_date"),
+                published_date=p.get("published_date") or p.get("updated_at_utc"),
+                updated_date=p.get("updated_date") or p.get("updated_at_utc"),
             )
             lines.append(paper.model_dump_json())
         except Exception as e:
@@ -195,20 +195,14 @@ def rebuild_delta_bm25(delta_jsonl_path: str, bm25_delta_path: str) -> None:
 
 
 def merge_keyword_index(keyword_index_path: str, new_papers: list) -> None:
-    """Merge new paper tokens into the keyword index with an atomic file swap."""
-    index = load_keyword_index(keyword_index_path)
-
+    """Merge new paper tokens directly into the keyword postings DB."""
     new_paper_tokens = []
     for p in new_papers:
         text = f"{p.get('title', '')}\n\n{p.get('abstract', '')}"
         new_paper_tokens.append((p["arxiv_id"], tokenize(text)))
 
-    merge_new_papers_into_index(index, new_paper_tokens)
-
-    tmp_path = keyword_index_path + ".tmp"
-    save_keyword_index(index, tmp_path)
-    os.replace(tmp_path, keyword_index_path)  # atomic on same filesystem
-    print(f"  Keyword index updated: {len(index):,} unique tokens", flush=True)
+    merge_new_papers_into_index_db(keyword_index_path, new_paper_tokens)
+    print(f"  Keyword index updated: {len(new_paper_tokens):,} papers merged", flush=True)
 
 
 # ---------------------------------------------------------------------------

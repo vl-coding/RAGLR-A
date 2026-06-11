@@ -33,8 +33,12 @@ def filter_by_academic_fields(
     papers: List[Paper],
     selected_fields: List[str],
     config: dict,
+    category_override: Optional[List[str]] = None,
 ) -> List[Paper]:
-    allowed_categories = categories_for_selected_fields(config, selected_fields)
+    if category_override is not None:
+        allowed_categories = category_override
+    else:
+        allowed_categories = categories_for_selected_fields(config, selected_fields)
 
     if allowed_categories is None:
         return papers

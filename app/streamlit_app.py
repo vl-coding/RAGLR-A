@@ -38,27 +38,16 @@ with st.sidebar:
         "Claude HyDE, SBERT + BM25 retrieval, and RRF ranking."
     )
 
-    st.divider()
-
     remaining = max(0, QUERY_LIMIT - st.session_state.queries_used)
     window_label = f"{WINDOW_SECONDS // 3600}h" if WINDOW_SECONDS >= 3600 else f"{WINDOW_SECONDS // 60}m"
 
     if remaining > 0:
-        st.metric("Free queries remaining", f"{remaining} / {QUERY_LIMIT}")
-        st.caption(f"Limit resets every {window_label} per session.")
+        st.caption(f"**Free queries remaining:** {remaining} / {QUERY_LIMIT} (resets every {window_label})")
     else:
         st.error(LIMIT_MESSAGE)
 
-    st.divider()
-
-    selected_labels = st.multiselect(
-        "Academic fields",
-        options=[d["label"] for d in config["academic_fields"].values()],
-        default=["All arXiv Fields"],
-    )
-
     field_options = {d["label"]: k for k, d in config["academic_fields"].items()}
-    selected_fields = [field_options[label] for label in selected_labels]
+    category_labels = config.get("category_labels", {})
 
     all_category_codes = sorted(
         cat
@@ -69,16 +58,49 @@ with st.sidebar:
             else []
         )
     )
+
+    category_to_field_label = {
+        cat: field_data["label"]
+        for field_data in config["academic_fields"].values()
+        if isinstance(field_data.get("categories"), list)
+        for cat in field_data["categories"]
+    }
+
+    if "academic_fields_select" not in st.session_state:
+        st.session_state["academic_fields_select"] = ["All arXiv Fields"]
+    if "subcategory_select" not in st.session_state:
+        st.session_state["subcategory_select"] = []
+
+    def _sync_academic_fields():
+        selected_cats = st.session_state["subcategory_select"]
+        needed_labels = {
+            category_to_field_label[c] for c in selected_cats if c in category_to_field_label
+        }
+        updated = set(st.session_state["academic_fields_select"]) | needed_labels
+        if "All arXiv Fields" in updated and len(updated) > 1:
+            updated.discard("All arXiv Fields")
+        st.session_state["academic_fields_select"] = list(updated)
+
+    selected_labels = st.multiselect(
+        "Academic fields",
+        options=[d["label"] for d in config["academic_fields"].values()],
+        key="academic_fields_select",
+    )
+
+    selected_fields = [field_options[label] for label in selected_labels]
+
     selected_categories = st.multiselect(
         "Restrict to specific arXiv subcategories (optional)",
         options=all_category_codes,
-        default=[],
+        format_func=lambda code: f"{category_labels.get(code, code)} ({code})",
+        key="subcategory_select",
+        on_change=_sync_academic_fields,
     )
 
     top_k = st.select_slider(
         "Results to return",
-        options=[5, 10, 15, 20, 25],
-        value=10,
+        options=config["retrieval"]["top_k_options"],
+        value=config["retrieval"]["default_top_k"],
     )
     use_qwen = st.checkbox("Qwen keyword prefilter", value=True)
     use_justification = st.checkbox("Claude justifications", value=True)
@@ -117,26 +139,28 @@ if search_button:
                 st.session_state.pipeline = RagLiteraturePipeline(config)
 
         if selected_categories:
-            run_config = dict(config)
-            run_config["academic_fields"] = {
-                "_custom": {
-                    "label": "Custom selection",
-                    "categories": selected_categories,
-                }
-            }
-            run_fields = ["_custom"]
+            run_fields = ["all"]
+            custom_categories = selected_categories
         else:
-            run_config = config
             run_fields = selected_fields if selected_fields else ["all"]
+            custom_categories = None
 
-        with st.spinner("Searching 3M+ arXiv papers ..."):
-            response = st.session_state.pipeline.run(
-                query=query,
-                selected_fields=run_fields,
-                top_k=top_k,
-                use_qwen_prefilter=use_qwen,
-                use_claude_justification=use_justification,
-            )
+        progress_bar = st.progress(0, text="Starting search ...")
+
+        def _update_progress(step: str, fraction: float) -> None:
+            progress_bar.progress(fraction, text=step)
+
+        response = st.session_state.pipeline.run(
+            query=query,
+            selected_fields=run_fields,
+            top_k=top_k,
+            use_qwen_prefilter=use_qwen,
+            use_claude_justification=use_justification,
+            custom_categories=custom_categories,
+            progress_callback=_update_progress,
+        )
+
+        progress_bar.empty()
 
         st.session_state.queries_used += 1
 
@@ -204,10 +228,3 @@ if search_button:
             file_name="literature_results.json",
             mime="application/json",
         )
-
-        # Update sidebar counter without rerun
-        remaining_after = max(0, QUERY_LIMIT - st.session_state.queries_used)
-        if remaining_after == 0:
-            st.sidebar.error(LIMIT_MESSAGE)
-        else:
-            st.sidebar.metric("Free queries remaining", f"{remaining_after} / {QUERY_LIMIT}")

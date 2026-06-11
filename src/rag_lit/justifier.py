@@ -26,6 +26,13 @@ class ClaudeJustifier:
             messages=[{"role": "user", "content": user_text}],
         )
         text = response.content[0].text.strip()
+        if text.startswith("```"):
+            text = text[len("```"):]
+            if text.startswith("json"):
+                text = text[len("json"):]
+            if text.endswith("```"):
+                text = text[: -len("```")]
+            text = text.strip()
         try:
             return json.loads(text)
         except Exception:

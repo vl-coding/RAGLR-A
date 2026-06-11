@@ -1,14 +1,13 @@
 import json
 import sys
 import time
-import pickle
 from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.rag_lit.config import load_config, ensure_project_dirs
-from src.rag_lit.keyword_index import tokenize
+from src.rag_lit.keyword_index import save_keyword_index_db, tokenize
 
 
 def main():
@@ -41,9 +40,7 @@ def main():
     print(f"Indexed {count:,} papers -> {len(index):,} unique tokens in {time.time()-t0:.1f}s", flush=True)
 
     out = config["paths"]["keyword_index"]
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "wb") as f:
-        pickle.dump(dict(index), f)
+    save_keyword_index_db(dict(index), out)
     print(f"Saved to {out}", flush=True)
     print(f"Done. Total elapsed: {time.time()-t0:.1f}s", flush=True)
 
