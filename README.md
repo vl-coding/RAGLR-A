@@ -1,34 +1,40 @@
 # RAGLR-A — RAG Literature Review Assistant (Demo)
 
-A domain-general arXiv retrieval demo built to explore multi-stage RAG pipelines for academic literature search. RAGLR-A combines sparse and dense retrieval with LLM-powered query expansion and relevance justification to surface relevant papers from across the full arXiv taxonomy.
+A domain-general arXiv retrieval system built to explore multi-stage RAG pipelines for academic literature search. RAGLR-A combines sparse and dense retrieval with LLM-powered query expansion and relevance justification to surface relevant papers from across the full arXiv taxonomy (3M+ papers).
 
 ---
 
-## What's been built
+## Demo
 
-### Core pipeline (complete)
-- **Field filter** — narrows the corpus to papers matching selected academic fields (e.g. Computer Science, Statistics, Physics)
-- **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
-- **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract representing an ideal result; this is used as the dense query vector
-- **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
-- **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
-- **Claude justifications** — for each top-k result, Claude Sonnet generates a structured relevance justification: contribution summary, relevance reasoning, and relevance/specificity scores (1–10)
-- **RetrievalTrace** — every response includes search-space reduction stats, latency breakdowns, and generated keywords
+![RAG Literature Review Assistant — Streamlit UI](docs/images/streamlit_demo.png)
 
-### Interfaces (complete)
-- **Streamlit UI** — interactive field/subcategory selection, query input, and results display
+This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-3B model for keyword extraction. On CPU, a single query takes roughly **2 minutes end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes + a 3B-parameter model warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
+
+Instead, this README documents the architecture and how to run it locally — see [Running it yourself](#running-it-yourself) below.
+
+---
+
+## Architecture
+
+Each query flows through the following stages:
+
+1. **Field filter** — narrows the corpus to papers matching selected academic fields (e.g. Computer Science, Statistics, Physics)
+2. **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
+3. **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract representing an ideal result; this is used as the dense query vector (runs in parallel with step 2)
+4. **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
+5. **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
+6. **Claude justifications** — for each top-k result, Claude Sonnet generates a structured relevance justification: contribution summary, relevance reasoning, and relevance/specificity scores (1–10)
+
+Every response also includes a `RetrievalTrace`: search-space reduction stats, latency breakdowns, and the keywords generated along the way.
+
+### Interfaces
+- **Streamlit UI** — interactive field/subcategory selection, query input, progress tracking, and results display
 - **FastAPI REST server** — `/search` and `/fields` endpoints with interactive docs
 - **CLI runner** — `scripts/run_query.py` for quick ad-hoc queries
 
-### Data pipeline (complete)
-- OAI-PMH harvester with incremental update support and recovery
-- JSONL preprocessing and multi-index build (dense, BM25, keyword)
-
-### Infrastructure improvements
-- Parallelized query pipeline (HyDE + dual retrieval run concurrently)
-- ChromaDB batch limit handling and indexing recovery pipeline
-- UTF-16 LE encoding support for log detection
-- Configurable `top_k` presets
+### Data pipeline
+- OAI-PMH harvester (`scripts/update_arxiv_data.py`) with incremental update support and recovery
+- JSONL preprocessing and multi-index build (dense, BM25, keyword, metadata)
 
 ---
 
@@ -38,42 +44,45 @@ A domain-general arXiv retrieval demo built to explore multi-stage RAG pipelines
 RAGLR-A/
 ├── api/                    FastAPI REST server
 ├── app/                    Streamlit UI
-├── artifacts/              Built indexes (gitignored)
+├── artifacts/              Built indexes (gitignored — ~40GB)
 ├── configs/
 │   ├── config.yaml         Runtime configuration
-│   └── arxiv_taxonomy.yaml Full arXiv field/category taxonomy
+│   └── arxiv_taxonomy.yaml Full arXiv field/category taxonomy + labels
 ├── data/
 │   ├── raw/                Raw OAI-PMH snapshot (gitignored)
 │   └── processed/          Cleaned paper JSONL (gitignored)
 ├── evaluation/             Eval queries and runner
 ├── prompts/                Versioned prompt templates
 ├── scripts/
-│   ├── update_arxiv_data.py   Harvest arXiv via OAI-PMH
-│   ├── build_indexes.py       Build dense, BM25, keyword indexes
-│   ├── run_query.py           CLI query runner
-│   └── inspect_outputs.py     Inspect saved results
+│   ├── update_arxiv_data.py     Harvest arXiv via OAI-PMH
+│   ├── orchestrate_indexing.py  Build all indexes end-to-end
+│   ├── build_bm25_index.py      Build BM25 index
+│   ├── build_keyword_index.py   Build keyword inverted index
+│   ├── build_dense_index_fast.py Build ChromaDB dense index
+│   ├── build_metadata_db.py     Build SQLite metadata index
+│   ├── incremental_update.py    Apply incremental data updates
+│   ├── run_query.py             CLI query runner
+│   └── run_scheduler.py         Scheduled incremental harvesting
 ├── src/rag_lit/            Core library
 │   ├── config.py           Config loader
 │   ├── schemas.py          Pydantic output schemas
 │   ├── pipeline.py         End-to-end pipeline
 │   ├── preprocessing.py    Field/candidate filtering
-│   ├── data_ingestion.py   JSONL load/save
 │   ├── keyword_index.py    Inverted index build/query
+│   ├── metadata_db.py      SQLite metadata index
 │   ├── qwen_prefilter.py   Qwen keyword extractor
 │   ├── hyde.py             Claude HyDE
 │   ├── dense_retriever.py  SBERT + ChromaDB retriever
 │   ├── bm25_retriever.py   BM25 retriever
 │   ├── rrf.py              Reciprocal Rank Fusion
 │   ├── justifier.py        Claude relevance justifier
-│   ├── taxonomy.py         Taxonomy utilities
-│   ├── logger.py           Logging setup
-│   └── utils.py            General utilities
+│   └── rate_limiter.py     Demo rate limiting
 └── tests/                  Unit and smoke tests
 ```
 
 ---
 
-## Setup
+## Running it yourself
 
 ### 1. Install dependencies
 
@@ -90,7 +99,7 @@ cp .env.example .env
 
 ### 3. Harvest arXiv data
 
-Test run (1,000 papers):
+Test run (1,000 papers — recommended for trying this out):
 ```bash
 python scripts/update_arxiv_data.py --max-records 1000
 ```
@@ -108,25 +117,24 @@ python scripts/update_arxiv_data.py --incremental
 ### 4. Build indexes
 
 ```bash
-python scripts/build_indexes.py
+python scripts/orchestrate_indexing.py
 ```
 
-This builds three artifacts in `artifacts/`:
+This builds the artifacts in `artifacts/`:
 - `dense_index/` — ChromaDB vector store (SBERT embeddings)
-- `bm25_index.pkl` — BM25 index
-- `keyword_inverted_index.pkl` — token → paper ID inverted index
+- `bm25_index/` — BM25 index
+- `keyword_inverted_index.pkl` / `keyword_index.sqlite3` — token → paper ID inverted index
+- `metadata.sqlite3` — paper metadata index (categories, byte offsets)
 
----
-
-## Usage
-
-### Streamlit UI
+### 5. Run the app
 
 ```bash
 streamlit run app/streamlit_app.py
 ```
 
 Select academic fields, optionally restrict to specific arXiv subcategories, enter a research question, and click **Find Papers**.
+
+> **Performance note:** with the full 3M-paper corpus on CPU, expect ~2 minutes per query (local Qwen keyword extraction + Claude HyDE + dual retrieval + per-result justification). A smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds, since most of the latency comes from running the local Qwen model and per-result Claude calls over a large candidate set.
 
 ### FastAPI server
 
@@ -141,7 +149,7 @@ Interactive docs at `http://localhost:8000/docs`.
 {
   "query": "attention mechanisms in transformers",
   "selected_fields": ["computer_science"],
-  "top_k": 10,
+  "top_k": 5,
   "use_qwen_prefilter": true,
   "use_claude_justification": true
 }
@@ -155,7 +163,7 @@ Interactive docs at `http://localhost:8000/docs`.
 python scripts/run_query.py \
   --query "graph neural networks for drug discovery" \
   --fields computer_science quantitative_biology \
-  --top-k 10
+  --top-k 5
 ```
 
 Add `--no-qwen` to skip keyword prefiltering, `--no-justification` to skip Claude scoring.

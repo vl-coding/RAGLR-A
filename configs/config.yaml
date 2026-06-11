@@ -10,7 +10,6 @@ data:
 
 retrieval:
   default_top_k: 5
-  top_k_options: [5, 10, 15, 20, 25]
   dense_candidates: 200
   bm25_candidates: 200
   rrf_k: 60

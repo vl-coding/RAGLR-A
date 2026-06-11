@@ -1,5 +1,3 @@
-import os
-
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -97,13 +95,11 @@ with st.sidebar:
         on_change=_sync_academic_fields,
     )
 
-    top_k = st.select_slider(
-        "Results to return",
-        options=config["retrieval"]["top_k_options"],
-        value=config["retrieval"]["default_top_k"],
-    )
+    top_k = config["retrieval"]["default_top_k"]
     use_qwen = st.checkbox("Qwen keyword prefilter", value=True)
     use_justification = st.checkbox("Claude justifications", value=True)
+
+    st.markdown(f"**This demo returns the top {top_k} papers per query.**")
 
 # -----------------------------------------------------------------------
 # Main area — query input + results
@@ -117,6 +113,8 @@ query = st.text_area(
 )
 
 limit_reached = st.session_state.queries_used >= QUERY_LIMIT
+
+st.caption("Searches typically take around 2 minutes to complete — please be patient after clicking search.")
 
 search_button = st.button(
     "Find Papers",
@@ -193,13 +191,36 @@ if search_button:
         # ---------------------------------------------------------------
         st.subheader(f"Top {len(response.results)} papers")
 
+        if len(response.results) < top_k:
+            st.warning(
+                f"Only {len(response.results)} of {top_k} papers were found for this query.\n\n"
+                "**Why this happens:** the search narrows 3M+ arXiv papers down step by step "
+                "(academic field, keywords, and semantic similarity). If your topic is very "
+                "specific, niche, or uses uncommon terminology, fewer papers may survive "
+                "every filtering step.\n\n"
+                "**Tips to get more results:**\n"
+                "- Broaden your academic field selection, or remove subcategory restrictions.\n"
+                "- Use more general search terms (e.g. \"transformer time series forecasting\" "
+                "instead of \"sparse attention transformers for irregular multivariate clinical time series\").\n"
+                "- Try rephrasing with synonyms or related terminology.\n"
+                "- Turn off the Qwen keyword prefilter — it narrows candidates before semantic "
+                "search and can be too aggressive for niche topics.\n\n"
+                "**Tip for your literature review:** a narrow niche often doesn't have many "
+                "papers written directly on it — but that's normal for original research. "
+                "Try running follow-up searches on the broader techniques, methods, or "
+                "application areas your topic builds on (e.g. the general method you're "
+                "adapting, the broader problem domain, or a related application area). "
+                "Papers from these adjacent searches are often the ones you'll cite to "
+                "justify your approach and show how your work fits into the existing "
+                "literature."
+            )
+
         for paper in response.results:
             with st.container():
                 st.markdown(f"#### {paper.rank}. {paper.title}")
-                col_a, col_b, col_c = st.columns([2, 2, 3])
+                col_a, col_b = st.columns([2, 2])
                 col_a.caption(f"**Year:** {paper.year}")
                 col_b.caption(f"**RRF score:** {paper.rrf_score:.4f}")
-                col_c.caption(f"**Categories:** {', '.join(paper.categories)}")
 
                 if paper.relevance_justification:
                     st.info(f"**Why relevant:** {paper.relevance_justification}")
