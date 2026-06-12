@@ -25,7 +25,7 @@ ChromaDB's `query()` method does not support native set-based ID filtering. RAGL
 `all-MiniLM-L6-v2` is a lightweight 22M-parameter model optimized for speed. It may underperform larger embedding models (e.g. `all-mpnet-base-v2`, `text-embedding-3-large`) on highly technical or domain-specific queries, especially in fields like mathematics or physics where notation-heavy text is common.
 
 **BM25 tokenization**
-The tokenizer uses a simple regex (`\b[a-zA-Z][a-zA-Z0-9\-]{2,}\b`) and lowercases all tokens. Mathematical symbols, Greek letters, and numeric identifiers (e.g. `GPT-4`, `BERT`) may be partially or incorrectly tokenized, reducing BM25 recall for queries involving model names or equations.
+The tokenizer uses a simple regex (`\b[a-zA-Z][a-zA-Z0-9\-]{1,}\b`) and lowercases all tokens. This keeps two-character alphanumeric tokens like `AI`, `ML`, `T5`, and `CV`, which were previously dropped entirely. Mathematical symbols and Greek letters (e.g. `α`, `β`) are still outside `[a-zA-Z0-9\-]` and are dropped, reducing BM25 recall for queries involving equations or symbol-heavy notation. A built index must be rebuilt (`scripts/build_indexes.py`) to pick up tokenizer changes.
 
 **HyDE quality**
 Claude's hypothetical abstract is conditioned solely on the user query. If the query is ambiguous or very short, the generated abstract may not accurately represent the desired research direction, which can skew dense retrieval.

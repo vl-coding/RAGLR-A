@@ -8,7 +8,7 @@ from .schemas import Paper
 
 
 def tokenize(text: str) -> List[str]:
-    return re.findall(r"\b[a-zA-Z][a-zA-Z0-9\-]{2,}\b", text.lower())
+    return re.findall(r"\b[a-zA-Z][a-zA-Z0-9\-]{1,}\b", text.lower())
 
 
 def build_keyword_inverted_index(papers: List[Paper]) -> Dict[str, Set[str]]:
