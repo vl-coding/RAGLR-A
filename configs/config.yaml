@@ -17,6 +17,7 @@ retrieval:
   max_prefilter_candidates: 50000
   target_reduction_min_percent: 86
   target_reduction_max_percent: 99
+  canonical_papers_path: "data/canonical_papers.yaml"
 
 models:
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"

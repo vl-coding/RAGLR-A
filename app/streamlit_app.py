@@ -148,7 +148,15 @@ if search_button:
 
         for paper in response.results:
             with st.container():
-                st.markdown(f"#### {paper.rank}. {paper.title}")
+                title = f"#### {paper.rank}. {paper.title}"
+                if paper.canonical_match:
+                    title += " :star: "
+                st.markdown(title)
+                if paper.canonical_match:
+                    st.caption(
+                        ":star: **Signature paper** — boosted as a foundational "
+                        "reference for this topic.",
+                    )
                 col_a, col_b = st.columns([2, 2])
                 col_a.caption(f"**Year:** {paper.year}")
                 col_b.caption(

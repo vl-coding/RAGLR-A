@@ -10,6 +10,7 @@ from .preprocessing import (
     filter_by_candidate_ids,
     reduction_percent,
 )
+from .canonical_boost import load_canonical_papers, match_canonical_papers
 from .keyword_index import open_keyword_index_db, candidate_ids_from_keywords
 from .metadata_db import build_metadata_db, load_metadata_db
 from .qwen_prefilter import QwenKeywordExtractor
@@ -83,6 +84,10 @@ class RagLiteraturePipeline:
         )
 
         self.bm25 = BM25Retriever.load(config["paths"]["bm25_index"])
+
+        self._canonical_papers = load_canonical_papers(
+            config["retrieval"].get("canonical_papers_path", "")
+        )
 
     # ------------------------------------------------------------------
     # Metadata index helpers
@@ -297,6 +302,15 @@ class RagLiteraturePipeline:
         if bm25_delta_results:
             ranked_lists.append(bm25_delta_results)
 
+        canonical_results = match_canonical_papers(
+            query=query,
+            keywords=generated_keywords,
+            canonical_papers=self._canonical_papers,
+            corpus_ids=all_ids,
+        )
+        if canonical_results:
+            ranked_lists.append(canonical_results)
+
         fused = reciprocal_rank_fusion(ranked_lists, k=self.config["retrieval"]["rrf_k"])
         top_items = fused[:top_k]
 
@@ -322,6 +336,8 @@ class RagLiteraturePipeline:
                     doc_id, result = future.result()
                     justifications[doc_id] = result
 
+        canonical_ids = {item["doc_id"] for item in canonical_results}
+
         final_results = []
         for item in top_items:
             paper = top_papers[item["doc_id"]]
@@ -339,6 +355,7 @@ class RagLiteraturePipeline:
                     rrf_score=item["rrf_score"],
                     dense_rank=item.get("dense_rank"),
                     bm25_rank=item.get("bm25_rank"),
+                    canonical_match=item["doc_id"] in canonical_ids,
                     contribution=justification.get("contribution"),
                     relevance_justification=justification.get("relevance_justification"),
                     relevance_score=justification.get("relevance_score"),
@@ -372,6 +389,7 @@ class RagLiteraturePipeline:
                 dense_results_raw_query=dense_results_raw_query,
                 bm25_results=bm25_results,
                 bm25_delta_results=bm25_delta_results,
+                canonical_results=canonical_results,
             )
 
         return SearchResponse(

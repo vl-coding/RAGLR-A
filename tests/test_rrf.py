@@ -1,3 +1,5 @@
+import pytest
+
 from src.rag_lit.rrf import reciprocal_rank_fusion
 
 
@@ -66,3 +68,22 @@ def test_source_tracking():
     a = next(item for item in fused if item["doc_id"] == "A")
     assert a["dense_rank"] == 1
     assert a["bm25_rank"] == 2
+
+
+def test_canonical_list_can_boost_a_doc_missing_from_other_retrievers():
+    dense = [
+        {"doc_id": "X", "rank": i, "score": 1.0, "source": "dense"}
+        for i in range(1, 11)
+    ]
+    bm25 = [
+        {"doc_id": "Y", "rank": i, "score": 1.0, "source": "bm25"}
+        for i in range(1, 11)
+    ]
+    canonical = [{"doc_id": "Z", "rank": 1, "source": "canonical"}]
+
+    fused = reciprocal_rank_fusion([dense, bm25, canonical], k=60)
+
+    z = next(item for item in fused if item["doc_id"] == "Z")
+    assert z["rrf_score"] == pytest.approx(1.0 / 61)
+    assert z["dense_rank"] is None
+    assert z["bm25_rank"] is None

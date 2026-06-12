@@ -1,0 +1,255 @@
+# Canonical/seminal papers ("signature papers") for well-established CS/ML
+# topics. Used by src/rag_lit/canonical_boost.py to give these papers a small
+# RRF rank boost when a query's terms match one of their `topics`.
+#
+# Why this exists: short, decade-old foundational papers (e.g. "Attention Is
+# All You Need") often lose to thousands of newer papers on both lexical
+# (BM25) and semantic (dense) similarity for queries phrased in modern
+# terminology -- see docs/EVALUATION.md "Diagnosing the remaining 4" and
+# issue #3. This registry lets a topically-matched canonical paper compete in
+# RRF fusion even when it falls outside the dense/BM25 candidate pools.
+#
+# `topics` are lowercase phrases checked as substrings against the lowercased
+# query text and the Qwen-extracted keywords. Papers are ranked by the total
+# character length of their matched topic phrases, so longer/more specific
+# matches (e.g. "parameter-efficient fine-tuning") outrank short, generic
+# ones (e.g. "large language model") -- a higher rank in the canonical
+# ranked list means a larger (but still modest) RRF score contribution. This
+# is a nudge, not an override: a single rank-1 canonical match contributes
+# ~1/(rrf_k+1), well below what a paper that ranks well in *both* retrievers
+# already earns.
+
+- arxiv_id: "1706.03762"
+  title: "Attention Is All You Need"
+  topics:
+    - "transformer architecture"
+    - "self-attention"
+    - "attention mechanism"
+    - "sequence modeling"
+    - "attention is all you need"
+
+- arxiv_id: "1901.02860"
+  title: "Transformer-XL"
+  topics:
+    - "transformer-xl"
+    - "transformer architecture"
+    - "long-range dependencies"
+    - "sequence modeling"
+
+- arxiv_id: "1910.10683"
+  title: "Exploring the Limits of Transfer Learning (T5)"
+  topics:
+    - "t5"
+    - "text-to-text transformer"
+    - "transfer learning"
+    - "sequence modeling"
+
+- arxiv_id: "2005.14165"
+  title: "Language Models are Few-Shot Learners (GPT-3)"
+  topics:
+    - "gpt-3"
+    - "few-shot learning"
+    - "in-context learning"
+    - "large language model"
+
+- arxiv_id: "1810.04805"
+  title: "BERT"
+  topics:
+    - "bert"
+    - "pretrained language model"
+    - "masked language model"
+    - "language understanding"
+
+- arxiv_id: "1907.11692"
+  title: "RoBERTa"
+  topics:
+    - "roberta"
+    - "pretrained language model"
+    - "language understanding"
+
+- arxiv_id: "1909.11942"
+  title: "ALBERT"
+  topics:
+    - "albert"
+    - "pretrained language model"
+    - "language understanding"
+
+- arxiv_id: "2003.10555"
+  title: "ELECTRA"
+  topics:
+    - "electra"
+    - "pretrained language model"
+    - "language understanding"
+
+- arxiv_id: "2106.09685"
+  title: "LoRA"
+  topics:
+    - "lora"
+    - "low-rank adaptation"
+    - "parameter-efficient fine-tuning"
+
+- arxiv_id: "1902.00751"
+  title: "Parameter-Efficient Transfer Learning for NLP (Adapters)"
+  topics:
+    - "adapter"
+    - "parameter-efficient fine-tuning"
+    - "parameter-efficient transfer learning"
+
+- arxiv_id: "2101.00190"
+  title: "Prefix-Tuning"
+  topics:
+    - "prefix-tuning"
+    - "parameter-efficient fine-tuning"
+
+- arxiv_id: "2110.07602"
+  title: "P-Tuning v2"
+  topics:
+    - "p-tuning"
+    - "prompt tuning"
+    - "parameter-efficient fine-tuning"
+
+- arxiv_id: "2010.11929"
+  title: "An Image is Worth 16x16 Words (ViT)"
+  topics:
+    - "vision transformer"
+    - "image classification"
+
+- arxiv_id: "2012.12877"
+  title: "DeiT"
+  topics:
+    - "deit"
+    - "data-efficient image transformers"
+    - "vision transformer"
+    - "image classification"
+
+- arxiv_id: "2103.14030"
+  title: "Swin Transformer"
+  topics:
+    - "swin transformer"
+    - "vision transformer"
+    - "image classification"
+
+- arxiv_id: "2106.04560"
+  title: "Scaling Vision Transformers"
+  topics:
+    - "scaling vision transformers"
+    - "vision transformer"
+    - "image classification"
+
+- arxiv_id: "2002.05709"
+  title: "SimCLR"
+  topics:
+    - "simclr"
+    - "contrastive learning"
+    - "self-supervised"
+    - "visual representations"
+
+- arxiv_id: "1911.05722"
+  title: "Momentum Contrast (MoCo)"
+  topics:
+    - "moco"
+    - "momentum contrast"
+    - "contrastive learning"
+    - "self-supervised"
+
+- arxiv_id: "2003.04297"
+  title: "MoCo v2"
+  topics:
+    - "moco"
+    - "momentum contrast"
+    - "contrastive learning"
+    - "self-supervised"
+
+- arxiv_id: "2006.07733"
+  title: "BYOL"
+  topics:
+    - "byol"
+    - "bootstrap your own latent"
+    - "self-supervised"
+    - "contrastive learning"
+
+- arxiv_id: "2006.11239"
+  title: "Denoising Diffusion Probabilistic Models (DDPM)"
+  topics:
+    - "ddpm"
+    - "denoising diffusion probabilistic models"
+    - "diffusion model"
+    - "image generation"
+
+- arxiv_id: "2010.02502"
+  title: "Denoising Diffusion Implicit Models (DDIM)"
+  topics:
+    - "ddim"
+    - "denoising diffusion implicit models"
+    - "diffusion model"
+    - "image generation"
+
+- arxiv_id: "2102.09672"
+  title: "Improved Denoising Diffusion Probabilistic Models"
+  topics:
+    - "improved ddpm"
+    - "diffusion model"
+    - "image generation"
+
+- arxiv_id: "2105.05233"
+  title: "Diffusion Models Beat GANs on Image Synthesis"
+  topics:
+    - "diffusion model"
+    - "image generation"
+    - "gan"
+
+- arxiv_id: "1710.10903"
+  title: "Graph Attention Networks"
+  topics:
+    - "graph attention network"
+    - "graph neural network"
+    - "attention mechanism"
+
+- arxiv_id: "1609.02907"
+  title: "Graph Convolutional Networks (Kipf & Welling)"
+  topics:
+    - "graph convolutional network"
+    - "graph neural network"
+
+- arxiv_id: "1706.02216"
+  title: "GraphSAGE"
+  topics:
+    - "graphsage"
+    - "graph neural network"
+    - "inductive representation learning"
+
+- arxiv_id: "1810.00826"
+  title: "How Powerful are Graph Neural Networks? (GIN)"
+  topics:
+    - "graph isomorphism network"
+    - "graph neural network"
+
+- arxiv_id: "2103.00020"
+  title: "CLIP"
+  topics:
+    - "clip"
+    - "contrastive language-image pretraining"
+    - "vision-language pretraining"
+    - "zero-shot transfer"
+
+- arxiv_id: "2102.05918"
+  title: "ALIGN"
+  topics:
+    - "align"
+    - "vision-language pretraining"
+    - "contrastive learning"
+    - "zero-shot transfer"
+
+- arxiv_id: "2201.12086"
+  title: "BLIP"
+  topics:
+    - "blip"
+    - "vision-language pretraining"
+    - "image captioning"
+
+- arxiv_id: "2205.01917"
+  title: "CoCa"
+  topics:
+    - "coca"
+    - "contrastive captioner"
+    - "vision-language pretraining"

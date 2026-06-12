@@ -40,6 +40,14 @@ class PaperResult(BaseModel):
     )
     dense_rank: Optional[int] = None
     bm25_rank: Optional[int] = None
+    canonical_match: bool = Field(
+        default=False,
+        description=(
+            "True if this paper is a curated 'signature paper' for a topic "
+            "matching the query (see data/canonical_papers.yaml), and "
+            "received an RRF boost from that match."
+        ),
+    )
     contribution: Optional[str] = None
     relevance_justification: Optional[str] = None
     relevance_score: Optional[float] = None
@@ -64,6 +72,7 @@ class RetrievalDebugInfo(BaseModel):
     dense_results_raw_query: Optional[List[Dict[str, Any]]] = None
     bm25_results: List[Dict[str, Any]] = []
     bm25_delta_results: List[Dict[str, Any]] = []
+    canonical_results: List[Dict[str, Any]] = []
 
 
 class SearchResponse(BaseModel):
