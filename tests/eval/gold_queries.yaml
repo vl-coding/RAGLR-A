@@ -1,45 +1,118 @@
 # Gold query set for retrieval evaluation.
 #
 # Each entry is one test query plus a small set of "known-relevant" arxiv_ids
-# (canonical/seed papers for that topic). These are used as a lower-bound
-# qrels set for:
+# (canonical/seed papers for that topic, or strong lexical/topical matches
+# found via BM25 search over the live corpus). These are used as a
+# lower-bound qrels set for:
 #   - prefilter recall (does the qwen keyword prefilter drop these ids?)
 #   - end-to-end Recall@k / Precision@k / NDCG@k / MRR on the final results
 #
-# IMPORTANT: verify every relevant_id actually exists in
-# data/processed/arxiv_papers.jsonl before relying on these numbers --
-# a missing id will silently count as "not retrieved" and deflate recall.
-# Expand each list with a few more known-relevant papers per topic once
-# verified; a single seed id per query makes Recall@k very noisy.
+# All ids below were verified to exist in data/processed/arxiv_papers.jsonl
+# via scripts/_gold_query_helper.py (check / search modes) before being
+# added here.
+
+# --- Computer science / ML ---------------------------------------------
 
 - query: "transformer architectures for sequence modeling"
   relevant_ids:
     - "1706.03762"  # Attention Is All You Need
+    - "1901.02860"  # Transformer-XL
+    - "1910.10683"  # T5 (Exploring the Limits of Transfer Learning)
+    - "2005.14165"  # GPT-3 (Language Models are Few-Shot Learners)
 
 - query: "pretrained language models for natural language understanding"
   relevant_ids:
     - "1810.04805"  # BERT
+    - "1907.11692"  # RoBERTa
+    - "1909.11942"  # ALBERT
+    - "2003.10555"  # ELECTRA
 
 - query: "parameter-efficient fine-tuning of large language models"
   relevant_ids:
     - "2106.09685"  # LoRA
+    - "1902.00751"  # Parameter-Efficient Transfer Learning for NLP (Adapters)
+    - "2101.00190"  # Prefix-Tuning
+    - "2110.07602"  # P-Tuning v2
 
 - query: "vision transformers for image classification"
   relevant_ids:
     - "2010.11929"  # An Image is Worth 16x16 Words (ViT)
+    - "2012.12877"  # DeiT (data-efficient image transformers)
+    - "2103.14030"  # Swin Transformer
+    - "2106.04560"  # Scaling Vision Transformers
 
 - query: "contrastive learning for self-supervised visual representations"
   relevant_ids:
     - "2002.05709"  # SimCLR
+    - "1911.05722"  # MoCo
+    - "2003.04297"  # MoCo v2
+    - "2006.07733"  # BYOL
 
 - query: "denoising diffusion probabilistic models for image generation"
   relevant_ids:
     - "2006.11239"  # DDPM
+    - "2010.02502"  # DDIM
+    - "2102.09672"  # Improved DDPM
+    - "2105.05233"  # Diffusion Models Beat GANs on Image Synthesis
 
 - query: "graph neural networks with attention mechanisms"
   relevant_ids:
     - "1710.10903"  # Graph Attention Networks
+    - "1609.02907"  # Graph Convolutional Networks (Kipf & Welling)
+    - "1706.02216"  # GraphSAGE
+    - "1810.00826"  # GIN (How Powerful are Graph Neural Networks?)
 
 - query: "contrastive language-image pretraining for zero-shot transfer"
   relevant_ids:
     - "2103.00020"  # CLIP
+    - "2102.05918"  # ALIGN
+    - "2201.12086"  # BLIP
+    - "2205.01917"  # CoCa
+
+# --- Biological sciences -------------------------------------------------
+
+- query: "deep learning for protein structure prediction"
+  relevant_ids:
+    - "2503.13522"  # Advanced Deep Learning Methods for Protein Structure Prediction and Design
+    - "2412.20329"  # Protein Structure Prediction in the 3D HP Model Using Deep RL
+    - "2501.01477"  # Survey of Deep Learning Methods in Protein Bioinformatics
+    - "2502.19173"  # A Model-Centric Review of Deep Learning for Protein Design
+
+- query: "single-cell transcriptomics analysis methods"
+  relevant_ids:
+    - "2412.03614"  # Deep Learning in Single-Cell and Spatial Transcriptomics Data Analysis
+    - "2503.09427"  # Language-Enhanced Representation Learning for Single-Cell Transcriptomics
+    - "2507.04125"  # Graph Neural Networks as a Substitute for Transformers in Single-Cell Transcriptomics
+    - "2601.01358"  # Explainable Rare Cell Identification in Single-Cell Transcriptomics Data
+
+# --- Mathematics -----------------------------------------------------------
+
+- query: "convergence analysis of stochastic gradient descent optimization"
+  relevant_ids:
+    - "2602.18946"  # Exponential Convergence of (Stochastic) Gradient Descent for Separable Logistic Regression
+    - "2508.20823"  # Revisiting SGD for Strongly Convex Objectives: Tight Uniform-in-Time Bounds
+    - "2412.06070"  # Stochastic Gradient Descent Revisited
+    - "2405.16954"  # Convergence of SGD with momentum in the nonconvex case
+
+- query: "topological data analysis and persistent homology"
+  relevant_ids:
+    - "2507.19504"  # Topological Data Analysis and Topological Deep Learning Beyond Persistent Homology
+    - "2505.06583"  # Persistent Homology: A Pedagogical Introduction with Biological Applications
+    - "2406.17045"  # Topological Data Analysis via Undergraduate Linear Algebra
+    - "2602.03163"  # A U-match Algorithm for Persistent Relative Homology
+
+# --- Physics -----------------------------------------------------------
+
+- query: "quantum error correction codes for fault-tolerant computing"
+  relevant_ids:
+    - "quant-ph/9705052"  # Stabilizer Codes and Quantum Error Correction
+    - "quant-ph/0507174"  # Quantum Error Correction and Fault-Tolerance
+    - "2508.06011"  # State-adaptive quantum error correction and fault-tolerant quantum computing
+    - "2410.13568"  # Measurement-free, scalable and fault-tolerant universal quantum computing
+
+- query: "machine learning methods for lattice quantum field theory"
+  relevant_ids:
+    - "2510.02159"  # Machine learning in phase transition analysis of lattice quantum gravity
+    - "2410.14466"  # Flow-Based Sampling for Entanglement Entropy and the Machine Learning of Defects
+    - "2405.16288"  # Generating configurations of increasing lattice size with ML and inverse RG
+    - "2504.18126"  # Lecture Notes on Normalizing Flows for Lattice Quantum Field Theories
