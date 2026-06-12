@@ -275,7 +275,7 @@ def split_categories(subject_values: List[str]) -> List[str]:
     return sorted(categories)
 
 
-def parse_oai_record(record: ET.Element) -> Optional[dict]:
+def parse_oai_record(record: ET.Element, drop_stats: Optional[Dict[str, int]] = None) -> Optional[dict]:
     """
     Parses one OAI-PMH record using oai_dc metadata.
 
@@ -288,11 +288,20 @@ def parse_oai_record(record: ET.Element) -> Optional[dict]:
         dc:date
 
     The parser uses local XML tag names so it is namespace-tolerant.
+
+    If drop_stats is provided, increments a counter under the reason a
+    record was dropped ("deleted", "no_arxiv_id", "missing_title_or_abstract")
+    or kept ("kept").
     """
+    def _bump(reason: str) -> None:
+        if drop_stats is not None:
+            drop_stats[reason] = drop_stats.get(reason, 0) + 1
+
     # Skip deleted records
     for header in record:
         if local_name(header.tag) == "header":
             if header.attrib.get("status") == "deleted":
+                _bump("deleted")
                 return None
 
     title_values = get_all_child_texts_by_local_name(record, "title")
@@ -315,6 +324,7 @@ def parse_oai_record(record: ET.Element) -> Optional[dict]:
             url = identifier
 
     if not arxiv_id:
+        _bump("no_arxiv_id")
         return None
 
     title = normalize_whitespace(title_values[0]) if title_values else ""
@@ -344,7 +354,10 @@ def parse_oai_record(record: ET.Element) -> Optional[dict]:
 
     if not title or not abstract:
         # Keep the system clean by skipping records without enough retrieval text.
+        _bump("missing_title_or_abstract")
         return None
+
+    _bump("kept")
 
     return {
         "arxiv_id": arxiv_id,
@@ -373,6 +386,7 @@ def harvest_oai_records(
     from_date: Optional[str] = None,
     max_records: Optional[int] = None,
     sleep_seconds: float = 3.0,
+    drop_stats: Optional[Dict[str, int]] = None,
 ) -> List[dict]:
     """
     Harvests records from arXiv OAI-PMH.
@@ -382,6 +396,9 @@ def harvest_oai_records(
 
     If from_date is provided:
         performs incremental harvest from that date.
+
+    If drop_stats is provided, accumulates per-record outcome counts
+    (see parse_oai_record) across the whole harvest.
 
     Note:
         For a complete production harvest, expect many requests.
@@ -414,7 +431,7 @@ def harvest_oai_records(
         records = records_from_oai_root(root)
 
         for record in records:
-            paper = parse_oai_record(record)
+            paper = parse_oai_record(record, drop_stats=drop_stats)
 
             if paper:
                 harvested.append(paper)
@@ -445,6 +462,7 @@ def write_manifest(
     papers_by_id: Dict[str, dict],
     update_mode: str,
     new_or_updated_count: int,
+    drop_stats: Optional[Dict[str, int]] = None,
 ) -> None:
     ensure_parent(manifest_path)
 
@@ -470,6 +488,7 @@ def write_manifest(
         "max_year": max(years) if years else None,
         "num_categories": len(category_counts),
         "category_counts": dict(sorted(category_counts.items())),
+        "ingestion_drop_stats_this_run": drop_stats or {},
     }
 
     with open(manifest_path, "w", encoding="utf-8") as f:
@@ -568,15 +587,19 @@ def main():
     print(f"Update mode: {update_mode}")
     print(f"OAI from date: {from_date}")
 
+    drop_stats: Dict[str, int] = {}
+
     harvested_papers = harvest_oai_records(
         base_url=base_url,
         metadata_prefix=metadata_prefix,
         from_date=from_date,
         max_records=args.max_records,
         sleep_seconds=args.sleep_seconds,
+        drop_stats=drop_stats,
     )
 
     print(f"Valid harvested papers this run: {len(harvested_papers)}")
+    print(f"Ingestion outcome counts this run: {drop_stats}")
 
     new_or_updated_count = 0
 
@@ -612,6 +635,7 @@ def main():
         papers_by_id=existing_papers,
         update_mode=update_mode,
         new_or_updated_count=new_or_updated_count,
+        drop_stats=drop_stats,
     )
 
     print("Update complete.")
