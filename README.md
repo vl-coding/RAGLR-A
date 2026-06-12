@@ -8,9 +8,9 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 ![RAG Literature Review Assistant — Streamlit UI](docs/images/streamlit_demo.png)
 
-[Full results page (PDF)](docs/images/streamlit_demo_full.pdf) — shows all 5 ranked papers with relevance justifications, contributions, and scores for the same query.
+[Full results page (PDF)](docs/images/streamlit_demo_full.pdf) — shows the full ranked list with relevance justifications, contributions, and scores for the same query.
 
-This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-3B model for keyword extraction. On CPU, a single query takes roughly **2 minutes end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes + a 3B-parameter model warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
+This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-3B model for keyword extraction. On CPU, a single query takes roughly **1 minute end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes + a 3B-parameter model warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
 
 If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — watch the video walkthrough instead:
 
@@ -100,9 +100,10 @@ pip install -r requirements.txt
 
 ### 2. Configure API keys
 
-```bash
-cp .env.example .env
-# Edit .env and set your ANTHROPIC_API_KEY
+Create a `.env` file in the project root:
+
+```
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
 ### 3. Harvest arXiv data
@@ -131,7 +132,7 @@ python scripts/orchestrate_indexing.py
 This builds the artifacts in `artifacts/`:
 - `dense_index/` — ChromaDB vector store (SBERT embeddings)
 - `bm25_index/` — BM25 index
-- `keyword_inverted_index.pkl` / `keyword_index.sqlite3` — token → paper ID inverted index
+- `keyword_index.sqlite3` — token → paper ID inverted index
 - `metadata.sqlite3` — paper metadata index (categories, byte offsets)
 
 ### 5. Run the app
@@ -142,7 +143,7 @@ streamlit run app/streamlit_app.py
 
 Enter a research question and click **Find Papers**.
 
-> **Performance note:** with the full 3M-paper corpus on CPU, expect ~2 minutes per query (local Qwen keyword extraction + Claude HyDE + dual retrieval + per-result justification). A smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds, since most of the latency comes from running the local Qwen model and per-result Claude calls over a large candidate set.
+> **Performance note:** with the full 3M-paper corpus on CPU, expect roughly **1 minute per query** (local Qwen keyword extraction + Claude HyDE + dual retrieval + per-result justification). A smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds, since most of the latency comes from running the local Qwen model and per-result Claude calls over a large candidate set.
 
 ### FastAPI server
 
