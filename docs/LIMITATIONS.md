@@ -9,7 +9,7 @@ arXiv OAI-PMH records use Dublin Core (`oai_dc`), which is a lowest-common-denom
 Papers without a title or abstract are dropped during ingestion. Records with no parseable arXiv ID (e.g. old-format identifiers that do not match the extractor) are also skipped. A small fraction of valid papers may be lost as a result.
 
 **Temporal freshness**
-The corpus reflects the state of arXiv at the time of the most recent harvest. New preprints submitted after that date will not appear in results until the next `update_arxiv_data.py --incremental` run.
+The corpus reflects the state of arXiv at the time of the most recent harvest. `scripts/run_scheduler.py` runs `scripts/incremental_update.py` twice daily (00:00 and 12:00 UTC by default) to harvest new papers and hot-reload the indexes with no downtime — see [setup.md](setup.md#7-start-the-incremental-update-scheduler). If the scheduler isn't running, new preprints won't appear until `update_arxiv_data.py --incremental` is run manually.
 
 **Category assignment**
 arXiv categories come from author self-reporting and are stored on each `Paper` record, but are not used for retrieval filtering. A paper may be cross-listed in multiple categories, or placed in a category that does not fully reflect its content.
