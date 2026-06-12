@@ -61,10 +61,10 @@ class BM25Retriever:
         np.save(str(out / "arxiv_ids.npy"), np.array(self.arxiv_ids, dtype=object))
 
     @staticmethod
-    def load(path: str) -> "BM25Retriever":
+    def load(path: str, mmap: bool = False) -> "BM25Retriever":
         out = Path(path)
         r = BM25Retriever()
-        r._bm25 = bm25s.BM25.load(str(out / "index"), load_corpus=False)
+        r._bm25 = bm25s.BM25.load(str(out / "index"), load_corpus=False, mmap=mmap)
         r.arxiv_ids = np.load(str(out / "arxiv_ids.npy"), allow_pickle=True).tolist()
         r.paper_id_to_index = {aid: i for i, aid in enumerate(r.arxiv_ids)}
         return r

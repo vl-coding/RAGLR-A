@@ -83,7 +83,10 @@ class RagLiteraturePipeline:
             persist_dir=config["paths"]["dense_index_dir"],
         )
 
-        self.bm25 = BM25Retriever.load(config["paths"]["bm25_index"])
+        self.bm25 = BM25Retriever.load(
+            config["paths"]["bm25_index"],
+            mmap=config["retrieval"].get("bm25_mmap", False),
+        )
 
         self._canonical_papers = load_canonical_papers(
             config["retrieval"].get("canonical_papers_path", "")

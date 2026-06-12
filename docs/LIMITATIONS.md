@@ -60,7 +60,7 @@ Building the dense index (ChromaDB + SBERT) over millions of papers is CPU/GPU-i
 Qwen2.5-0.5B-Instruct runs in float16 on GPU or float32 on CPU. On CPU, keyword extraction can add several seconds of latency per query. Consider disabling (`--no-qwen`) for low-latency use cases.
 
 **Memory**
-The BM25 index is loaded into RAM at pipeline startup; for a corpus of several million papers this can use several GB. The keyword index is SQLite-backed and queried via point lookups, so it relies on the OS page cache rather than being loaded wholesale into the Python process.
+By default, the BM25 index is loaded into RAM at pipeline startup; for a corpus of several million papers this can use several GB. Set `retrieval.bm25_mmap: true` in `config.yaml` to memory-map the index's CSC arrays (`bm25s.BM25.load(..., mmap=True)`) instead — each query then pages in only the score-array slices for its own tokens, and the OS page cache keeps hot tokens resident across queries, similar to how the keyword index (SQLite-backed, point lookups) already behaves. This trades a small amount of per-query I/O latency (mostly on cold pages) for a much smaller resident set, and requires no index rebuild — only `BM25Retriever.load()`'s `mmap` argument changes. The delta BM25 index (`bm25_delta`) is small and always loaded fully into RAM regardless of this setting.
 
 ---
 
