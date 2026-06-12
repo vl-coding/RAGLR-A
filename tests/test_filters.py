@@ -1,4 +1,5 @@
 from src.rag_lit.preprocessing import (
+    arxiv_id_sort_key,
     filter_by_candidate_ids,
     reduction_percent,
 )
@@ -45,3 +46,25 @@ def test_reduction_percent_zero_original():
 
 def test_reduction_percent_no_reduction():
     assert reduction_percent(500, 500) == 0.0
+
+
+def test_arxiv_id_sort_key_new_format_chronological():
+    assert arxiv_id_sort_key("0704.0001") < arxiv_id_sort_key("1706.03762")
+    assert arxiv_id_sort_key("1706.03762") < arxiv_id_sort_key("2606.07517")
+
+
+def test_arxiv_id_sort_key_old_format_always_oldest():
+    # Old-format ids (pre-2007) must sort before *every* new-format id,
+    # even though "supr-con/..." > "1706.03762" as plain strings.
+    assert arxiv_id_sort_key("quant-ph/9705052") < arxiv_id_sort_key("0704.0001")
+    assert arxiv_id_sort_key("supr-con/9609004") < arxiv_id_sort_key("1706.03762")
+
+
+def test_arxiv_id_sort_key_strips_version_suffix():
+    assert arxiv_id_sort_key("2010.07626v1") == arxiv_id_sort_key("2010.07626")
+
+
+def test_arxiv_id_sort_key_old_format_year_rollover():
+    # YY >= 91 -> 19YY, YY < 91 -> 20YY (arxiv old-format ids run 1991-2007)
+    assert arxiv_id_sort_key("hep-th/9711200")[0] == 1997
+    assert arxiv_id_sort_key("math/0211159")[0] == 2002

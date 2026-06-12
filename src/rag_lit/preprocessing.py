@@ -1,6 +1,37 @@
-from typing import List, Set
+import re
+from typing import List, Set, Tuple
 
 from .schemas import Paper
+
+_VERSION_SUFFIX_RE = re.compile(r"v\d+$")
+_NEW_ID_RE = re.compile(r"^(\d{2})(\d{2})\.(\d+)$")
+_OLD_ID_RE = re.compile(r"^[a-zA-Z][\w\-.]*/(\d{2})(\d{2})(\d+)$")
+
+
+def arxiv_id_sort_key(arxiv_id: str) -> Tuple[int, int, int]:
+    """Chronological sort key for an arxiv id, as (year, month, sequence).
+
+    Handles both the post-2007 'YYMM.NNNNN' format and the pre-2007
+    'category/YYMMNNN' format (e.g. "quant-ph/9705052"). A naive descending
+    string sort puts every old-format id (starting with a letter) ahead of
+    every new-format id (starting with a digit), so selecting "the most
+    recent N papers" via `sorted(ids, reverse=True)[:n]` silently drops
+    ~17 years of new-format papers in favor of all pre-2007 ones.
+    """
+    clean = _VERSION_SUFFIX_RE.sub("", arxiv_id)
+
+    m = _NEW_ID_RE.match(clean)
+    if m:
+        yy, mm, seq = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return (2000 + yy, mm, seq)
+
+    m = _OLD_ID_RE.match(clean)
+    if m:
+        yy, mm, seq = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        year = 1900 + yy if yy >= 91 else 2000 + yy
+        return (year, mm, seq)
+
+    return (0, 0, 0)
 
 
 def filter_by_candidate_ids(papers: List[Paper], candidate_ids: Set[str]) -> List[Paper]:

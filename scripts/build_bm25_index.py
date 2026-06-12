@@ -11,6 +11,7 @@ import bm25s
 
 from src.rag_lit.config import load_config, ensure_project_dirs
 from src.rag_lit.keyword_index import tokenize
+from src.rag_lit.preprocessing import arxiv_id_sort_key
 
 
 def stream_papers(path: str):
@@ -50,10 +51,12 @@ def main():
         if (i + 1) % 200_000 == 0:
             print(f"  Read {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
 
-    # Sort by arxiv_id descending so --max-papers selects the most recent.
-    # arxiv IDs are zero-padded and encode submission date, so lexicographic
-    # sort is chronological.
-    all_papers.sort(key=lambda x: x[0], reverse=True)
+    # Sort by (year, month, sequence) descending so --max-papers selects the
+    # most recent papers. A plain lexicographic sort on the id string would
+    # put every pre-2007 'category/YYMMNNN' id ahead of every 'YYMM.NNNNN'
+    # id (letters > digits in ASCII), which silently drops ~17 years of
+    # new-format papers from the "most recent N" selection.
+    all_papers.sort(key=lambda x: arxiv_id_sort_key(x[0]), reverse=True)
 
     if args.max_papers and args.max_papers < len(all_papers):
         print(
