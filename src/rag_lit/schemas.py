@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Paper(BaseModel):
@@ -30,7 +30,14 @@ class PaperResult(BaseModel):
     categories: List[str] = []
     url: Optional[str] = None
     abstract_snippet: str = ""
-    rrf_score: float
+    rrf_score: float = Field(
+        description=(
+            "Reciprocal Rank Fusion score used to order results. This is an "
+            "ordinal fusion score, not a relevance probability, and is not "
+            "comparable across different queries or candidate set sizes. "
+            "Use `rank` for the result's position in this result set."
+        )
+    )
     dense_rank: Optional[int] = None
     bm25_rank: Optional[int] = None
     contribution: Optional[str] = None

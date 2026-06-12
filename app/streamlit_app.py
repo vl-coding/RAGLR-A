@@ -151,7 +151,15 @@ if search_button:
                 st.markdown(f"#### {paper.rank}. {paper.title}")
                 col_a, col_b = st.columns([2, 2])
                 col_a.caption(f"**Year:** {paper.year}")
-                col_b.caption(f"**RRF score:** {paper.rrf_score:.4f}")
+                col_b.caption(
+                    f"**Fusion score:** {paper.rrf_score:.4f}",
+                    help=(
+                        "Reciprocal Rank Fusion score — an ordinal value used "
+                        "to order these results, not a relevance probability. "
+                        "Not comparable across different searches. Use the "
+                        "result's position (#{}) for ranking.".format(paper.rank)
+                    ),
+                )
 
                 if paper.relevance_justification:
                     st.info(f"**Why relevant:** {paper.relevance_justification}")
