@@ -69,6 +69,37 @@ def normalize_whitespace(text: Optional[str]) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# Inline LaTeX formatting commands whose argument should be kept verbatim,
+# e.g. "\textbf{robust}" -> "robust".
+_LATEX_TEXT_COMMAND_RE = re.compile(
+    r"\\(?:textbf|textit|textsc|texttt|emph|mathrm|mathbf|mathit|mathcal)\{([^{}]*)\}"
+)
+
+# Escaped special characters that LaTeX renders as the literal character,
+# e.g. "100\%" -> "100%".
+_LATEX_ESCAPED_CHAR_RE = re.compile(r"\\([%&_#\$])")
+
+
+def clean_latex_artifacts(text: Optional[str]) -> str:
+    """Strip a conservative set of unrendered LaTeX artifacts from OAI-PMH text.
+
+    Some arXiv abstracts/titles include raw LaTeX source rather than rendered
+    text. This handles the common, low-risk cases: inline formatting commands
+    (unwrapped to their argument), escaped special characters (unescaped to
+    the literal character), "\\" line breaks, and bare "$...$" math
+    delimiters (the delimiters are dropped; their contents are left as-is
+    since BM25 already ignores non-alphanumeric symbols).
+    """
+    if not text:
+        return ""
+
+    text = _LATEX_TEXT_COMMAND_RE.sub(r"\1", text)
+    text = _LATEX_ESCAPED_CHAR_RE.sub(r"\1", text)
+    text = text.replace("\\\\", " ")
+    text = text.replace("$", "")
+    return text
+
+
 def local_name(tag: str) -> str:
     """
     Converts '{namespace}title' into 'title'.
@@ -327,10 +358,14 @@ def parse_oai_record(record: ET.Element, drop_stats: Optional[Dict[str, int]] = 
         _bump("no_arxiv_id")
         return None
 
-    title = normalize_whitespace(title_values[0]) if title_values else ""
+    title = normalize_whitespace(clean_latex_artifacts(title_values[0])) if title_values else ""
 
     # Usually the abstract is in dc:description.
-    abstract = normalize_whitespace(description_values[0]) if description_values else ""
+    abstract = (
+        normalize_whitespace(clean_latex_artifacts(description_values[0]))
+        if description_values
+        else ""
+    )
 
     authors = [normalize_whitespace(author) for author in creator_values if author]
 

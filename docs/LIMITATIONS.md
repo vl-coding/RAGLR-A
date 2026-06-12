@@ -3,7 +3,7 @@
 ## Data
 
 **OAI-PMH metadata quality**
-arXiv OAI-PMH records use Dublin Core (`oai_dc`), which is a lowest-common-denominator metadata format. Abstracts are sometimes truncated, whitespace-collapsed, or encoded with LaTeX that is not rendered. Author lists and dates may be incomplete in older records.
+arXiv OAI-PMH records use Dublin Core (`oai_dc`), which is a lowest-common-denominator metadata format. Author lists and dates may be incomplete in older records. Whitespace is collapsed during ingestion (`normalize_whitespace`), and a conservative set of unrendered LaTeX artifacts is cleaned up (`clean_latex_artifacts`): inline formatting commands like `\textbf{...}`/`\emph{...}` are unwrapped to their argument, escaped characters like `\%`/`\&`/`\_` are unescaped, `\\` line breaks become spaces, and bare `$...$` math delimiters are dropped. More complex LaTeX (nested commands, custom macros, tables/equations) is not reconstructed. Abstracts that are truncated at the source are not detected or repaired — the original (possibly incomplete) text is kept.
 
 **Coverage gaps**
 Papers without a title or abstract are dropped during ingestion, as are records marked `deleted` by arXiv or with no parseable arXiv ID. `scripts/update_arxiv_data.py` now tracks per-run drop counts (`kept`, `deleted`, `no_arxiv_id`, `missing_title_or_abstract`), printed at the end of each harvest and recorded in `artifacts/manifest.json` under `ingestion_drop_stats_this_run` so the drop rate is visible over time. Old-format arXiv identifiers (e.g. `math/0309136`) are already handled by `extract_arxiv_id_from_identifier`, so `no_arxiv_id` drops should be rare in practice; the main expected source of loss is `missing_title_or_abstract`.
