@@ -14,16 +14,18 @@ RAGLR-A has no external ground-truth test collection, so evaluation is built on 
 
 ## Gold query set
 
-`tests/eval/gold_queries.yaml` contains **14 queries**, each with a `query` string and 4 `relevant_ids` (arxiv IDs of papers that are known to exist in `data/processed/arxiv_papers.jsonl` and are topically relevant):
+`tests/eval/gold_queries.yaml` contains **26 queries**, each with a `query` string and 4 `relevant_ids` (arxiv IDs of papers that are known to exist in `data/processed/arxiv_papers.jsonl` and are topically relevant):
 
 | Domain | # queries | Example |
 |---|---|---|
-| Computer science / ML | 8 | "transformer architectures for sequence modeling" → Attention Is All You Need, Transformer-XL, T5, GPT-3 |
+| Computer science / ML | 20 | "transformer architectures for sequence modeling" → Attention Is All You Need, Transformer-XL, T5, GPT-3 |
 | Biological sciences | 2 | "deep learning for protein structure prediction" |
 | Mathematics | 2 | "convergence analysis of stochastic gradient descent optimization" |
 | Physics | 2 | "quantum error correction codes for fault-tolerant computing" |
 
 For the CS/ML queries, `relevant_ids` are canonical/seminal papers for that topic, chosen independent of any retrieval method. For the biology/math/physics queries (where there's no single "canonical" paper), `relevant_ids` are strong topical matches found via dense (SBERT) search over the live corpus, independent of BM25.
+
+**issue #1**: the CS/ML section was expanded from 8 to 20 queries (covering RLHF/DPO, GANs, word embeddings, seq2seq/NMT attention, adaptive optimizers, neural architecture search, object detection, knowledge distillation, federated learning, normalization, VAEs, and sparse MoE — all canonical/seminal papers, none chosen by running any retriever) to dilute the bio/math/physics dense-search bias in pooled metrics and give the `hyde` ablation's Wilcoxon test more statistical power (issue #2). All sections below reflect eval runs against the prior **14-query** set ("Latest results", "Canonical-paper boost results", "RRF k sensitivity"); a re-run against the full 26-query set is needed to refresh those numbers.
 
 To extend the set, add entries in the same format:
 
@@ -205,8 +207,8 @@ Run each ablation and compare result overlap and ranking against the default pip
 
 Tracked in [issue #1](https://github.com/vl-coding/RAGLR-A/issues/1) (qrels) and [issue #2](https://github.com/vl-coding/RAGLR-A/issues/2) (HyDE ablation methodology).
 
-- **Small qrels per query.** Each query has only 4 `relevant_ids`, which is a *lower bound* on relevance — there are almost certainly other relevant papers in a 3M-paper corpus that aren't in the gold set, so `recall@10` understates true recall and the metric mostly measures whether the curated IDs specifically surface.
-- **Bio/math/physics qrels are dense-search-sourced**, which favors raw-query dense retrieval for those 6 queries in the `hyde` ablation specifically (their `relevant_ids` were selected by running the same query through dense search). The `e2e` and `prefilter` metrics are less affected since they depend on the full fused pipeline, not raw dense search alone — but any HyDE-vs-raw comparison should be read primarily from the 8 CS/ML queries, whose qrels are retrieval-method-independent.
+- **Small qrels per query.** Each query has only 4 `relevant_ids`, which is a *lower bound* on relevance — there are almost certainly other relevant papers in a 3M-paper corpus that aren't in the gold set, so `recall@10` understates true recall and the metric mostly measures whether the curated IDs specifically surface. (issue #1 expanded the *number* of CS/ML queries from 8 to 20, but each still has only 4 `relevant_ids` — this per-query sparsity is unchanged.)
+- **Bio/math/physics qrels are dense-search-sourced**, which favors raw-query dense retrieval for those 6 queries in the `hyde` ablation specifically (their `relevant_ids` were selected by running the same query through dense search). The `e2e` and `prefilter` metrics are less affected since they depend on the full fused pipeline, not raw dense search alone — but any HyDE-vs-raw comparison should be read primarily from the CS/ML queries, whose qrels are retrieval-method-independent. As of issue #1, these 6 dense-search-sourced queries are now 6/26 (down from 6/14) of the pooled set, reducing — but not eliminating — their influence on pooled `hyde`-ablation means.
 - **HyDE ablation is underpowered** (n=14) — the Wilcoxon test cannot reliably detect small or query-dependent effects at this sample size.
 - **Claude-as-judge relevance/specificity scores** are a secondary signal and inherit whatever bias the judging model has.
 

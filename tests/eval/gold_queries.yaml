@@ -13,6 +13,11 @@
 # relevant_ids were originally sourced via BM25 search (scripts/_gold_query_helper.py),
 # then re-derived via dense (SBERT) search over the live corpus to avoid
 # biasing the qrels toward whichever retrieval method picked them.
+#
+# issue #1: the CS/ML section was expanded from 8 to 20 queries (still
+# canonical/seminal papers chosen independent of any retrieval method) to
+# dilute the bio/math/physics dense-search bias in pooled metrics and give
+# the HyDE-vs-raw Wilcoxon test more statistical power.
 
 # --- Computer science / ML ---------------------------------------------
 
@@ -71,6 +76,90 @@
     - "2102.05918"  # ALIGN
     - "2201.12086"  # BLIP
     - "2205.01917"  # CoCa
+
+- query: "reinforcement learning from human feedback for language model alignment"
+  relevant_ids:
+    - "1706.03741"  # Deep Reinforcement Learning from Human Preferences
+    - "1707.06347"  # Proximal Policy Optimization Algorithms (PPO)
+    - "2203.02155"  # InstructGPT (Training LMs to follow instructions with human feedback)
+    - "2305.18290"  # Direct Preference Optimization (DPO)
+
+- query: "generative adversarial networks for image synthesis"
+  relevant_ids:
+    - "1406.2661"   # Generative Adversarial Networks (Goodfellow et al.)
+    - "1511.06434"  # DCGAN (Unsupervised Representation Learning with Deep Convolutional GANs)
+    - "1701.07875"  # Wasserstein GAN
+    - "1812.04948"  # StyleGAN (A Style-Based Generator Architecture for GANs)
+
+- query: "word embeddings and distributed representations for natural language processing"
+  relevant_ids:
+    - "1301.3781"   # word2vec (Efficient Estimation of Word Representations in Vector Space)
+    - "1310.4546"   # Distributed Representations of Words and Phrases and their Compositionality
+    - "1607.04606"  # fastText (Enriching Word Vectors with Subword Information)
+    - "1802.05365"  # ELMo (Deep contextualized word representations)
+
+- query: "sequence-to-sequence learning and attention for neural machine translation"
+  relevant_ids:
+    - "1409.3215"   # Sequence to Sequence Learning with Neural Networks
+    - "1409.0473"   # Neural Machine Translation by Jointly Learning to Align and Translate (Bahdanau attention)
+    - "1508.04025"  # Effective Approaches to Attention-based Neural Machine Translation (Luong attention)
+    - "1609.08144"  # Google's Neural Machine Translation System (GNMT)
+
+- query: "adaptive gradient-based optimization methods for training neural networks"
+  relevant_ids:
+    - "1412.6980"   # Adam: A Method for Stochastic Optimization
+    - "1212.5701"   # ADADELTA: An Adaptive Learning Rate Method
+    - "1711.05101"  # Decoupled Weight Decay Regularization (AdamW)
+    - "1904.09237"  # On the Convergence of Adam and Beyond (AMSGrad)
+
+- query: "neural architecture search for efficient convolutional networks"
+  relevant_ids:
+    - "1611.01578"  # Neural Architecture Search with Reinforcement Learning
+    - "1806.09055"  # DARTS: Differentiable Architecture Search
+    - "1905.11946"  # EfficientNet: Rethinking Model Scaling for CNNs
+    - "1704.04861"  # MobileNets: Efficient CNNs for Mobile Vision Applications
+
+- query: "deep learning methods for object detection in images"
+  relevant_ids:
+    - "1506.01497"  # Faster R-CNN
+    - "1506.02640"  # YOLO (You Only Look Once)
+    - "1512.02325"  # SSD: Single Shot MultiBox Detector
+    - "1703.06870"  # Mask R-CNN
+
+- query: "knowledge distillation for compressing neural network models"
+  relevant_ids:
+    - "1503.02531"  # Distilling the Knowledge in a Neural Network
+    - "1910.01108"  # DistilBERT
+    - "1909.10351"  # TinyBERT
+    - "1606.07947"  # Sequence-Level Knowledge Distillation
+
+- query: "federated learning across decentralized data"
+  relevant_ids:
+    - "1602.05629"  # Communication-Efficient Learning of Deep Networks from Decentralized Data (FedAvg)
+    - "1812.06127"  # Federated Optimization in Heterogeneous Networks (FedProx)
+    - "1908.07873"  # Federated Learning: Challenges, Methods, and Future Directions
+    - "1912.04977"  # Advances and Open Problems in Federated Learning
+
+- query: "normalization techniques for training deep neural networks"
+  relevant_ids:
+    - "1502.03167"  # Batch Normalization
+    - "1607.06450"  # Layer Normalization
+    - "1607.08022"  # Instance Normalization
+    - "1803.08494"  # Group Normalization
+
+- query: "variational autoencoders for generative modeling"
+  relevant_ids:
+    - "1312.6114"   # Auto-Encoding Variational Bayes
+    - "1401.4082"   # Stochastic Backpropagation and Approximate Inference in Deep Generative Models
+    - "1509.00519"  # Importance Weighted Autoencoders
+    - "1711.00937"  # VQ-VAE (Neural Discrete Representation Learning)
+
+- query: "sparse mixture-of-experts models for scaling neural networks"
+  relevant_ids:
+    - "1701.06538"  # Outrageously Large Neural Networks: The Sparsely-Gated MoE Layer
+    - "2006.16668"  # GShard
+    - "2101.03961"  # Switch Transformers
+    - "2202.08906"  # ST-MoE: Designing Stable and Transferable Sparse Expert Models
 
 # --- Biological sciences -------------------------------------------------
 
