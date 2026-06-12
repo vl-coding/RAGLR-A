@@ -23,7 +23,7 @@ RAGLR-A has no external ground-truth test collection, so evaluation is built on 
 | Mathematics | 2 | "convergence analysis of stochastic gradient descent optimization" |
 | Physics | 2 | "quantum error correction codes for fault-tolerant computing" |
 
-For the CS/ML queries, `relevant_ids` are canonical/seminal papers for that topic. For the biology/math/physics queries (where there's no single "canonical" paper), `relevant_ids` are strong topical matches found via BM25 search over the live corpus.
+For the CS/ML queries, `relevant_ids` are canonical/seminal papers for that topic, chosen independent of any retrieval method. For the biology/math/physics queries (where there's no single "canonical" paper), `relevant_ids` are strong topical matches found via dense (SBERT) search over the live corpus, independent of BM25.
 
 To extend the set, add entries in the same format:
 
@@ -74,39 +74,48 @@ Examines the distribution of Claude's `relevance_score` / `specificity_score` ac
 
 ---
 
-## Latest results (14-query gold set, `--top-k 10`)
+## Latest results (14-query gold set, `--top-k 10`, `outputs/eval_report_full_14q.json`)
+
+These results were produced **after** fixing a BM25 index-build bug (`scripts/build_bm25_index.py` was selecting the "most recent 1M papers" via a lexicographic sort on `arxiv_id`, which put every pre-2007 `category/YYMMNNN`-style id ahead of all `YYMM.NNNNN` ids and silently dropped the entire 2007–2024 range — including every CS/ML canonical paper in the gold set — from the BM25 index). The index now covers the 2M most recent papers by corrected chronological order, and the bio/math/physics `relevant_ids` were re-derived via dense search (see above), so this run is not directly comparable to the pre-fix numbers below.
 
 ### Prefilter recall
 
-`outputs/eval_report_prefilter_expanded.json` — **mean `recall_final_candidates = 1.000`** across all 14 queries (keyword-candidate sizes ranged from ~35k to ~3.0M out of 3,067,125 papers). The keyword prefilter never drops a known-relevant paper for this gold set.
+**mean `recall_final_candidates = 1.000`** across all 14 queries (keyword-candidate sizes ranged from ~35k to ~3.0M out of 3,067,125 papers). The keyword prefilter never drops a known-relevant paper for this gold set.
 
 ### HyDE ablation
 
-`outputs/eval_report_hyde_e2e_expanded.json`:
-
 | Metric | HyDE | Raw query |
 |---|---|---|
-| mean NDCG@10 | 0.066 | 0.085 |
-| NDCG@10 wins/ties/losses (HyDE vs. raw) | 3 / 8 / 3 | — |
-| Wilcoxon signed-rank | statistic=8.5, **p=0.674** | (not significant) |
+| mean NDCG@10 | 0.123 | 0.434 |
+| NDCG@10 wins/ties/losses (HyDE vs. raw) | 4 / 4 / 6 | — |
+| Wilcoxon signed-rank | statistic=10.0, **p=0.0735** | (not significant at α=0.05) |
 
-On this 14-query set, HyDE-document dense search does **not** show a statistically significant advantage over embedding the raw query — mean NDCG is actually slightly higher for raw-query embedding, and the Wilcoxon test is far from significant (p=0.674, n=14). This is consistent with the earlier 8-query CS/ML-only run (p=0.1875, also not significant, though that run favored HyDE on mean NDCG). HyDE's value likely depends heavily on the specific query phrasing rather than being a uniform win.
+Raw-query dense search now scores much higher than before (mean NDCG@10 0.434 vs. the prior run's 0.085), but this is largely an artifact of how the bio/math/physics qrels were re-derived: those 6 queries' `relevant_ids` were chosen by running the *exact same query text* through dense search and picking from the results, so raw-query dense search trivially recalls them (`raw_recall = 1.000` for queries 9–14). For the 8 CS/ML queries — whose `relevant_ids` were chosen independent of any retrieval method — HyDE and raw query are much closer (both near-zero NDCG for queries 1–3 and 8, with HyDE ahead on queries 7–8 and behind on 9–14). The p=0.0735 result is not significant and should not be read as "raw query beats HyDE"; see "Known evaluation gaps" below.
 
 ### End-to-end relevance
 
 | Metric | Mean |
 |---|---|
-| Precision@10 | 0.121 |
-| Recall@10 | 0.304 |
-| NDCG@10 | 0.210 |
-| MRR | 0.205 |
+| Precision@10 | 0.086 |
+| Recall@10 | 0.214 |
+| NDCG@10 | 0.197 |
+| MRR | 0.345 |
 
-Results are bimodal by domain:
+Per-query hits against `relevant_ids`:
 
-- **CS/ML queries (1–8)**: 0 hits for all 8 — none of the canonical seminal papers (e.g. "Attention Is All You Need", BERT, CLIP) appear in the final top-10 for their respective queries.
-- **Biology/math/physics queries (9–14)**: 0.25–1.0 recall@10, with the lattice-QFT query hitting all 4 relevant_ids (recall@10 = 1.0).
+- **CS/ML queries (1–8)**: 4 of 8 now get at least one hit in the top-10 — vision transformers (ViT, 2010.11929), contrastive learning (SimCLR, 2002.05709), denoising diffusion (DDPM + DDIM, 2/4), and graph neural networks (GAT, 1710.10903). The other 4 (transformer architectures, pretrained language models, parameter-efficient fine-tuning, CLIP) still get 0 hits. This is a major improvement from the pre-fix run, where **all 8** CS/ML queries scored 0 — the BM25 fix recovers some, but not all, of the canonical papers into the top-10.
+- **Biology/math/physics queries (9–14)**: all 6 get at least one hit (recall@10 0.25–0.75), e.g. protein structure prediction hits 3/4 relevant_ids (recall=0.75).
 
-This split is at least partly a property of how the gold IDs were chosen: the bio/math/physics `relevant_ids` were themselves sourced via BM25 search over this corpus, so they're biased toward papers the pipeline can lexically match. The CS/ML canonical papers are older (2017–2022), topically "obvious" to a human, but apparently not surfaced in the top 10 by the current dense+BM25+RRF fusion — worth investigating directly (see below).
+Overall precision/recall/NDCG dropped slightly versus the pre-fix run (0.121→0.086 P@10, 0.304→0.214 R@10) while MRR rose (0.205→0.345). This is expected: the bio/math/physics qrels are no longer hand-picked to match BM25's output, so they're harder to hit exactly, while several CS/ML canonical papers are now retrievable at all (raising MRR by giving more queries a non-zero top hit) even if not always landing in the top-10.
+
+### Justifier score calibration
+
+| Score | n | mean | stdev | min | max |
+|---|---|---|---|---|---|
+| `relevance_score` | 140 | 9.071 | 0.957 | 6 | 10 |
+| `specificity_score` | 140 | 8.121 | 0.714 | 6 | 10 |
+
+Decoy discrimination (mean top-k `relevance_score` vs. mean score for 5 random decoy papers per query, `--decoys 5`): **mean gap = 8.071** (per-query gaps range 6.8–9.0, decoy mean = 1.0 for every query). Claude's relevance scoring clearly separates retrieved top-k results from random papers, but scores are tightly clustered near the top of the 1–10 scale (mean ~9, stdev <1) — the justifier is better at flagging "not relevant at all" than at finely ranking degrees of relevance among already-retrieved papers.
 
 ---
 
@@ -126,7 +135,6 @@ Run each ablation and compare result overlap and ranking against the default pip
 ## Known evaluation gaps
 
 - **Small qrels per query.** Each query has only 4 `relevant_ids`, which is a *lower bound* on relevance — there are almost certainly other relevant papers in a 3M-paper corpus that aren't in the gold set, so `recall@10` understates true recall and the metric mostly measures whether the curated IDs specifically surface.
-- **Bio/math/physics qrels are BM25-sourced**, which somewhat favors lexical-match-friendly retrieval over the CS/ML qrels (canonical papers chosen independent of this corpus's retrieval behavior).
+- **Bio/math/physics qrels are dense-search-sourced**, which favors raw-query dense retrieval for those 6 queries in the `hyde` ablation specifically (their `relevant_ids` were selected by running the same query through dense search). The `e2e` and `prefilter` metrics are less affected since they depend on the full fused pipeline, not raw dense search alone — but any HyDE-vs-raw comparison should be read primarily from the 8 CS/ML queries, whose qrels are retrieval-method-independent.
 - **HyDE ablation is underpowered** (n=14) — the Wilcoxon test cannot reliably detect small or query-dependent effects at this sample size.
-- **`calibration` has not yet been run on the expanded 14-query set** — the only calibration data available is from the original 8-query CS/ML set.
 - **Claude-as-judge relevance/specificity scores** are a secondary signal and inherit whatever bias the judging model has.
