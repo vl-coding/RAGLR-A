@@ -33,6 +33,9 @@ Claude's hypothetical abstract is conditioned solely on the user query. If the q
 **RRF score interpretability**
 RRF scores are not probabilities and are not directly comparable across queries with different candidate set sizes. They should be treated as ordinal ranks, not cardinal relevance scores.
 
+**Old but significant papers rank poorly**
+Foundational papers (e.g. "Attention Is All You Need", BERT, GPT-3, CLIP) often fall outside both retrievers' top-200 candidates for queries phrased in current terminology — their decade-old vocabulary doesn't compete lexically (BM25) or semantically (dense) with thousands of newer papers describing the same ideas. This is an inherent property of similarity-based retrieval over a large, fast-moving corpus, not something `rrf_k` tuning or a larger candidate set fixes. See `docs/EVALUATION.md` for the full diagnosis.
+
 ---
 
 ## Models
