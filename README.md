@@ -10,7 +10,7 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 [Full results page (PDF)](docs/images/streamlit_demo_full.pdf) — shows the full ranked list with relevance justifications, contributions, and scores for the same query.
 
-This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-3B model for keyword extraction. On CPU, a single query takes roughly **1 minute end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes + a 3B-parameter model warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
+This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model for keyword extraction. On CPU, a single query takes roughly **1 minute end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
 
 If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — watch the video walkthrough instead:
 
@@ -26,7 +26,7 @@ Instead, this README documents the architecture and how to run it locally — se
 
 Each query flows through the following stages:
 
-1. **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
+1. **Qwen keyword prefilter** — a local Qwen2.5-0.5B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
 2. **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract representing an ideal result; this is used as the dense query vector (runs in parallel with step 1)
 3. **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
 4. **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
@@ -191,7 +191,7 @@ pytest tests/test_pipeline_smoke.py -v
 
 | Role | Model |
 |---|---|
-| Keyword extraction | Qwen/Qwen2.5-3B-Instruct (local) |
+| Keyword extraction | Qwen/Qwen2.5-0.5B-Instruct (local) |
 | Dense embeddings | sentence-transformers/all-MiniLM-L6-v2 (local) |
 | HyDE query expansion | claude-sonnet-4-6 (API) |
 | Relevance justification | claude-sonnet-4-6 (API) |

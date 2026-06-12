@@ -24,7 +24,7 @@ MINI_CONFIG = {
         "bm25_delta": "artifacts/bm25_delta",
     },
     "models": {
-        "qwen_model": "Qwen/Qwen2.5-3B-Instruct",
+        "qwen_model": "Qwen/Qwen2.5-0.5B-Instruct",
         "claude_model": "claude-sonnet-4-6",
         "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
     },

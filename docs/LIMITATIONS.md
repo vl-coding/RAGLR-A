@@ -37,8 +37,8 @@ RRF scores are not probabilities and are not directly comparable across queries 
 
 ## Models
 
-**Qwen2.5-3B-Instruct**
-The keyword extractor is a 3B-parameter model running locally. It may generate irrelevant, redundant, or overly broad keywords for complex or interdisciplinary queries. The pipeline falls back to tokenizing the raw query if the model output cannot be parsed as a JSON list.
+**Qwen2.5-0.5B-Instruct**
+The keyword extractor is a 0.5B-parameter model running locally. It may generate irrelevant, redundant, or overly broad keywords for complex or interdisciplinary queries. The pipeline falls back to tokenizing the raw query if the model output cannot be parsed as a JSON list.
 
 **Claude justifications**
 Claude's relevance and specificity scores (1–10) are not calibrated across queries. A score of 8 for one query may not be comparable to a score of 8 for another. Scores should be used for relative ranking within a single result set, not for cross-query comparisons. Justifications may occasionally be verbose, overly positive, or hallucinated if Claude lacks domain expertise in the subject area.
@@ -54,10 +54,10 @@ Claude is called once for HyDE and once per top-k result for justification. With
 Building the dense index (ChromaDB + SBERT) over millions of papers is CPU/GPU-intensive and can take several hours on a standard machine without a GPU. BM25 and keyword index builds are faster but also memory-intensive for large corpora.
 
 **Qwen local inference**
-Qwen2.5-3B-Instruct runs in float16 on GPU or float32 on CPU. On CPU, keyword extraction can add several seconds of latency per query. Consider disabling (`--no-qwen`) for low-latency use cases.
+Qwen2.5-0.5B-Instruct runs in float16 on GPU or float32 on CPU. On CPU, keyword extraction can add several seconds of latency per query. Consider disabling (`--no-qwen`) for low-latency use cases.
 
 **Memory**
-The BM25 index and keyword inverted index are loaded into RAM at pipeline startup. For a corpus of several million papers, RAM usage can exceed 4–8 GB.
+The BM25 index is loaded into RAM at pipeline startup; for a corpus of several million papers this can use several GB. The keyword index is SQLite-backed and queried via point lookups, so it relies on the OS page cache rather than being loaded wholesale into the Python process.
 
 ---
 
