@@ -22,3 +22,24 @@ def test_tokenize_keeps_hyphenated_model_names():
 
 def test_tokenize_drops_single_character_tokens():
     assert tokenize("a b cd e") == ["cd"]
+
+
+def test_tokenize_transliterates_greek_letters():
+    assert tokenize("the α and β parameters") == [
+        "the",
+        "alpha",
+        "and",
+        "beta",
+        "parameters",
+    ]
+
+
+def test_tokenize_transliterates_uppercase_greek_letters():
+    assert tokenize("Δ-step updates with Σ aggregation") == [
+        "delta",
+        "step",
+        "updates",
+        "with",
+        "sigma",
+        "aggregation",
+    ]
