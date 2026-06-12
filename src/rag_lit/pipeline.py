@@ -3,11 +3,10 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple, Optional, Set
+from typing import Callable, Dict, NamedTuple, Optional, Set
 
-from .schemas import Paper, SearchResponse, PaperResult, RetrievalTrace
+from .schemas import Paper, SearchResponse, PaperResult, RetrievalTrace, RetrievalDebugInfo
 from .preprocessing import (
-    filter_by_academic_fields,
     filter_by_candidate_ids,
     reduction_percent,
 )
@@ -23,7 +22,6 @@ from .justifier import ClaudeJustifier
 
 class _PaperMeta(NamedTuple):
     arxiv_id: str
-    categories: list
 
 
 class RagLiteraturePipeline:
@@ -83,7 +81,7 @@ class RagLiteraturePipeline:
 
     @staticmethod
     def _build_meta_index(jsonl_path: str, db_path: str):
-        """Load (arxiv_id, categories, byte offset) for every paper.
+        """Load (arxiv_id, byte offset) for every paper.
 
         Reads from a SQLite metadata DB (built once, persisted on disk) so
         startup is a single bulk SELECT instead of json.loads-ing every line
@@ -104,7 +102,7 @@ class RagLiteraturePipeline:
             build_metadata_db(jsonl_path, db_path)
 
         rows, offsets = load_metadata_db(db_path)
-        meta = [_PaperMeta(arxiv_id, categories) for arxiv_id, categories in rows]
+        meta = [_PaperMeta(arxiv_id) for arxiv_id, _categories in rows]
         return meta, offsets
 
     def _load_delta_meta_from(self, byte_pos: int) -> None:
@@ -127,8 +125,7 @@ class RagLiteraturePipeline:
                 arxiv_id = obj.get("arxiv_id", "")
                 if not arxiv_id or arxiv_id in self._delta_offsets:
                     continue
-                categories = obj.get("categories", [])
-                self._all_meta.append(_PaperMeta(arxiv_id, categories))
+                self._all_meta.append(_PaperMeta(arxiv_id))
                 self._delta_offsets[arxiv_id] = offset
                 self._delta_ids.add(arxiv_id)
             self._delta_read_pos = f.tell()
@@ -194,12 +191,12 @@ class RagLiteraturePipeline:
     def run(
         self,
         query: str,
-        selected_fields: List[str],
         top_k: int = 10,
         use_qwen_prefilter: bool = True,
         use_claude_justification: bool = True,
-        custom_categories: Optional[List[str]] = None,
         progress_callback: Optional[Callable[[str, float], None]] = None,
+        debug: bool = False,
+        hyde_ablation: bool = False,
     ) -> SearchResponse:
         def _report(step: str, fraction: float) -> None:
             if progress_callback is not None:
@@ -209,20 +206,12 @@ class RagLiteraturePipeline:
 
         start_total = time.time()
         total_corpus_size = len(self._all_meta)
-
-        _report("Filtering papers by academic field ...", 0.05)
-        field_filtered = filter_by_academic_fields(
-            self._all_meta,
-            selected_fields,
-            self.config,
-            category_override=custom_categories,
-        )
-        field_filtered_size = len(field_filtered)
-        field_filtered_ids = {paper.arxiv_id for paper in field_filtered}
+        all_ids = {paper.arxiv_id for paper in self._all_meta}
 
         generated_keywords = []
+        keyword_candidate_ids = None
 
-        _report("Generating search keywords and hypothetical document ...", 0.15)
+        _report("Generating search keywords and hypothetical document ...", 0.1)
         if use_qwen_prefilter:
             if self._qwen is None:
                 self._qwen = QwenKeywordExtractor(self._qwen_model_name)
@@ -237,16 +226,16 @@ class RagLiteraturePipeline:
                 conn=self.keyword_index,
                 mode="union",
             )
-            final_candidate_ids = field_filtered_ids & keyword_candidate_ids
+            final_candidate_ids = all_ids & keyword_candidate_ids
 
             if len(final_candidate_ids) < self.config["retrieval"]["min_prefilter_candidates"]:
-                final_candidate_ids = field_filtered_ids
+                final_candidate_ids = all_ids
         else:
-            final_candidate_ids = field_filtered_ids
+            final_candidate_ids = all_ids
             hyde_document = self.hyde.generate(query)
 
         _report("Filtering candidates by keywords ...", 0.35)
-        keyword_filtered = filter_by_candidate_ids(field_filtered, final_candidate_ids)
+        keyword_filtered = filter_by_candidate_ids(self._all_meta, final_candidate_ids)
         keyword_filtered_size = len(keyword_filtered)
 
         _report("Running dense vector search ...", 0.45)
@@ -257,6 +246,14 @@ class RagLiteraturePipeline:
             top_n=self.config["retrieval"]["dense_candidates"],
         )
         dense_latency = time.time() - dense_start
+
+        dense_results_raw_query = None
+        if hyde_ablation:
+            dense_results_raw_query = self.dense.search(
+                query_text=query,
+                candidate_ids=list(final_candidate_ids),
+                top_n=self.config["retrieval"]["dense_candidates"],
+            )
 
         _report("Running BM25 keyword search ...", 0.6)
         bm25_start = time.time()
@@ -341,16 +338,11 @@ class RagLiteraturePipeline:
 
         trace = RetrievalTrace(
             total_corpus_size=total_corpus_size,
-            field_filtered_size=field_filtered_size,
             keyword_filtered_size=keyword_filtered_size,
-            reduction_percent_after_field_filter=reduction_percent(
-                total_corpus_size, field_filtered_size
-            ),
             reduction_percent_after_keyword_filter=reduction_percent(
                 total_corpus_size, keyword_filtered_size
             ),
             generated_keywords=generated_keywords,
-            selected_fields=selected_fields,
             hyde_document=hyde_document,
             dense_latency_seconds=round(dense_latency, 3),
             bm25_latency_seconds=round(bm25_latency, 3),
@@ -359,12 +351,26 @@ class RagLiteraturePipeline:
 
         _report("Done", 1.0)
 
+        debug_info = None
+        if debug:
+            debug_info = RetrievalDebugInfo(
+                keyword_candidate_ids=(
+                    sorted(keyword_candidate_ids) if keyword_candidate_ids is not None else None
+                ),
+                final_candidate_ids=sorted(final_candidate_ids),
+                dense_results=dense_results,
+                dense_results_raw_query=dense_results_raw_query,
+                bm25_results=bm25_results,
+                bm25_delta_results=bm25_delta_results,
+            )
+
         return SearchResponse(
             query=query,
             results=final_results,
             trace=trace,
             metadata={
                 "pipeline_version": "v1",
-                "retrieval_method": "field_filter + qwen_prefilter + hyde + dense + bm25 + rrf",
+                "retrieval_method": "qwen_prefilter + hyde + dense + bm25 + rrf",
             },
+            debug=debug_info,
         )

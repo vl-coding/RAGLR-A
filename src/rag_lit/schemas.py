@@ -41,16 +41,22 @@ class PaperResult(BaseModel):
 
 class RetrievalTrace(BaseModel):
     total_corpus_size: int
-    field_filtered_size: int
     keyword_filtered_size: int
-    reduction_percent_after_field_filter: float
     reduction_percent_after_keyword_filter: float
     generated_keywords: List[str] = []
-    selected_fields: List[str] = []
     hyde_document: str = ""
     dense_latency_seconds: float = 0.0
     bm25_latency_seconds: float = 0.0
     total_latency_seconds: float = 0.0
+
+
+class RetrievalDebugInfo(BaseModel):
+    keyword_candidate_ids: Optional[List[str]] = None
+    final_candidate_ids: List[str] = []
+    dense_results: List[Dict[str, Any]] = []
+    dense_results_raw_query: Optional[List[Dict[str, Any]]] = None
+    bm25_results: List[Dict[str, Any]] = []
+    bm25_delta_results: List[Dict[str, Any]] = []
 
 
 class SearchResponse(BaseModel):
@@ -58,3 +64,4 @@ class SearchResponse(BaseModel):
     results: List[PaperResult] = []
     trace: RetrievalTrace
     metadata: Dict[str, Any] = {}
+    debug: Optional[RetrievalDebugInfo] = None

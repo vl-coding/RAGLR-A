@@ -1,52 +1,6 @@
-from typing import List, Optional, Set
+from typing import List, Set
 
 from .schemas import Paper
-
-
-def categories_for_selected_fields(
-    config: dict,
-    selected_fields: List[str],
-) -> Optional[List[str]]:
-    field_config = config["academic_fields"]
-
-    if not selected_fields or "all" in selected_fields:
-        return None  # None means no category filter
-
-    categories: Set[str] = set()
-
-    for field_key in selected_fields:
-        if field_key not in field_config:
-            raise ValueError(f"Unknown academic field: {field_key}")
-
-        cats = field_config[field_key]["categories"]
-
-        if cats == "*":
-            return None  # Wildcard means all categories
-
-        for cat in cats:
-            categories.add(cat)
-
-    return sorted(categories)
-
-
-def filter_by_academic_fields(
-    papers: List[Paper],
-    selected_fields: List[str],
-    config: dict,
-    category_override: Optional[List[str]] = None,
-) -> List[Paper]:
-    if category_override is not None:
-        allowed_categories = category_override
-    else:
-        allowed_categories = categories_for_selected_fields(config, selected_fields)
-
-    if allowed_categories is None:
-        return papers
-
-    return [
-        paper for paper in papers
-        if any(cat in allowed_categories for cat in paper.categories)
-    ]
 
 
 def filter_by_candidate_ids(papers: List[Paper], candidate_ids: Set[str]) -> List[Paper]:

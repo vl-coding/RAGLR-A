@@ -26,18 +26,17 @@ Instead, this README documents the architecture and how to run it locally — se
 
 Each query flows through the following stages:
 
-1. **Field filter** — narrows the corpus to papers matching selected academic fields (e.g. Computer Science, Statistics, Physics)
-2. **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
-3. **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract representing an ideal result; this is used as the dense query vector (runs in parallel with step 2)
-4. **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
-5. **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
-6. **Claude justifications** — for each top-k result, Claude Sonnet generates a structured relevance justification: contribution summary, relevance reasoning, and relevance/specificity scores (1–10)
+1. **Qwen keyword prefilter** — a local Qwen2.5-3B-Instruct model extracts up to 18 search keywords and intersects them against a prebuilt inverted index, reducing the candidate pool before expensive retrieval
+2. **Claude HyDE** — Claude Sonnet generates a hypothetical paper abstract representing an ideal result; this is used as the dense query vector (runs in parallel with step 1)
+3. **Dual retrieval** — SBERT (all-MiniLM-L6-v2) dense retrieval via ChromaDB and BM25 sparse retrieval run in parallel over the candidate set
+4. **Reciprocal Rank Fusion** — results from both retrievers are fused using RRF (k=60) to produce a single ranked list
+5. **Claude justifications** — for each top-k result, Claude Sonnet generates a structured relevance justification: contribution summary, relevance reasoning, and relevance/specificity scores (1–10)
 
 Every response also includes a `RetrievalTrace`: search-space reduction stats, latency breakdowns, and the keywords generated along the way.
 
 ### Interfaces
-- **Streamlit UI** — interactive field/subcategory selection, query input, progress tracking, and results display
-- **FastAPI REST server** — `/search` and `/fields` endpoints with interactive docs
+- **Streamlit UI** — query input, progress tracking, and results display
+- **FastAPI REST server** — `/search` endpoint with interactive docs
 - **CLI runner** — `scripts/run_query.py` for quick ad-hoc queries
 
 ### Data pipeline
@@ -54,8 +53,7 @@ RAGLR-A/
 ├── app/                    Streamlit UI
 ├── artifacts/              Built indexes (gitignored — ~40GB)
 ├── configs/
-│   ├── config.yaml         Runtime configuration
-│   └── arxiv_taxonomy.yaml Full arXiv field/category taxonomy + labels
+│   └── config.yaml         Runtime configuration
 ├── data/
 │   ├── raw/                Raw OAI-PMH snapshot (gitignored)
 │   └── processed/          Cleaned paper JSONL (gitignored)
@@ -75,7 +73,7 @@ RAGLR-A/
 │   ├── config.py           Config loader
 │   ├── schemas.py          Pydantic output schemas
 │   ├── pipeline.py         End-to-end pipeline
-│   ├── preprocessing.py    Field/candidate filtering
+│   ├── preprocessing.py    Candidate ID filtering
 │   ├── keyword_index.py    Inverted index build/query
 │   ├── metadata_db.py      SQLite metadata index
 │   ├── qwen_prefilter.py   Qwen keyword extractor
@@ -140,7 +138,7 @@ This builds the artifacts in `artifacts/`:
 streamlit run app/streamlit_app.py
 ```
 
-Select academic fields, optionally restrict to specific arXiv subcategories, enter a research question, and click **Find Papers**.
+Enter a research question and click **Find Papers**.
 
 > **Performance note:** with the full 3M-paper corpus on CPU, expect ~2 minutes per query (local Qwen keyword extraction + Claude HyDE + dual retrieval + per-result justification). A smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds, since most of the latency comes from running the local Qwen model and per-result Claude calls over a large candidate set.
 
@@ -156,21 +154,17 @@ Interactive docs at `http://localhost:8000/docs`.
 ```json
 {
   "query": "attention mechanisms in transformers",
-  "selected_fields": ["computer_science"],
-  "top_k": 5,
+  "top_k": 10,
   "use_qwen_prefilter": true,
   "use_claude_justification": true
 }
 ```
-
-**GET /fields** — list all available academic fields.
 
 ### CLI
 
 ```bash
 python scripts/run_query.py \
   --query "graph neural networks for drug discovery" \
-  --fields computer_science quantitative_biology \
   --top-k 5
 ```
 
@@ -201,6 +195,6 @@ pytest tests/test_pipeline_smoke.py -v
 
 ---
 
-## Supported arXiv fields
+## Corpus coverage
 
-Computer Science · Mathematics · Physics · Astrophysics · Condensed Matter · High Energy Physics · Nuclear Physics · Nonlinear Sciences · Statistics · Quantitative Biology · Quantitative Finance · Economics · Electrical Engineering and Systems Science · Other Physics
+The harvested corpus spans the full arXiv taxonomy: Computer Science · Mathematics · Physics · Astrophysics · Condensed Matter · High Energy Physics · Nuclear Physics · Nonlinear Sciences · Statistics · Quantitative Biology · Quantitative Finance · Economics · Electrical Engineering and Systems Science · Other Physics

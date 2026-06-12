@@ -9,7 +9,7 @@ data:
   oai_metadata_prefix: "oai_dc"
 
 retrieval:
-  default_top_k: 5
+  default_top_k: 10
   dense_candidates: 200
   bm25_candidates: 200
   rrf_k: 60
@@ -29,7 +29,6 @@ demo:
   limit_message: "Free demo limit reached — {limit} queries per hour. Full access coming soon."
 
 paths:
-  taxonomy: "configs/arxiv_taxonomy.yaml"
   dense_index_dir: "artifacts/dense_index"
   bm25_index: "artifacts/bm25_index"
   bm25_delta: "artifacts/bm25_delta"

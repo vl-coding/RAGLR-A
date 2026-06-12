@@ -34,13 +34,6 @@ MINI_CONFIG = {
         "rrf_k": 60,
         "min_prefilter_candidates": 5,
     },
-    "academic_fields": {
-        "all": {"label": "All arXiv Fields", "categories": "*"},
-        "computer_science": {
-            "label": "Computer Science",
-            "categories": ["cs.AI", "cs.LG"],
-        },
-    },
 }
 
 SAMPLE_PAPERS = [
@@ -55,7 +48,7 @@ SAMPLE_PAPERS = [
     for i in range(1, 6)
 ]
 
-_SAMPLE_META = [_PaperMeta(p.arxiv_id, p.categories) for p in SAMPLE_PAPERS]
+_SAMPLE_META = [_PaperMeta(p.arxiv_id) for p in SAMPLE_PAPERS]
 _SAMPLE_OFFSETS = {p.arxiv_id: i * 100 for i, p in enumerate(SAMPLE_PAPERS)}
 _PAPER_LOOKUP = {p.arxiv_id: p for p in SAMPLE_PAPERS}
 
@@ -140,7 +133,6 @@ def test_pipeline_returns_search_response():
     pipeline = _build_mock_pipeline()
     response = pipeline.run(
         query="What are recent advances in transformer models?",
-        selected_fields=["computer_science"],
         top_k=3,
     )
     assert isinstance(response, SearchResponse)
@@ -151,7 +143,6 @@ def test_pipeline_trace_fields():
     pipeline = _build_mock_pipeline()
     response = pipeline.run(
         query="attention mechanisms in NLP",
-        selected_fields=["all"],
         top_k=2,
     )
     trace = response.trace
@@ -163,7 +154,6 @@ def test_pipeline_no_qwen():
     pipeline = _build_mock_pipeline()
     response = pipeline.run(
         query="graph neural networks",
-        selected_fields=["computer_science"],
         top_k=2,
         use_qwen_prefilter=False,
     )
@@ -175,7 +165,6 @@ def test_pipeline_no_justification():
     pipeline = _build_mock_pipeline()
     response = pipeline.run(
         query="diffusion models",
-        selected_fields=["computer_science"],
         top_k=2,
         use_claude_justification=False,
     )
@@ -184,11 +173,37 @@ def test_pipeline_no_justification():
         assert result.relevance_justification is None
 
 
+def test_pipeline_debug_output():
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=2,
+        debug=True,
+        hyde_ablation=True,
+    )
+    debug = response.debug
+    assert debug is not None
+    assert debug.final_candidate_ids
+    assert set(debug.final_candidate_ids) == {p.arxiv_id for p in SAMPLE_PAPERS}
+    assert debug.keyword_candidate_ids is not None
+    assert debug.dense_results
+    assert debug.dense_results_raw_query is not None
+    assert debug.bm25_results
+
+
+def test_pipeline_no_debug_by_default():
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=2,
+    )
+    assert response.debug is None
+
+
 def test_pipeline_result_ranks_are_sequential():
     pipeline = _build_mock_pipeline()
     response = pipeline.run(
         query="contrastive learning",
-        selected_fields=["all"],
         top_k=5,
     )
     ranks = [r.rank for r in response.results]

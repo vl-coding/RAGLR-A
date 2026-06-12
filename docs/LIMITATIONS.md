@@ -12,7 +12,7 @@ Papers without a title or abstract are dropped during ingestion. Records with no
 The corpus reflects the state of arXiv at the time of the most recent harvest. New preprints submitted after that date will not appear in results until the next `update_arxiv_data.py --incremental` run.
 
 **Category assignment**
-arXiv categories come from author self-reporting. A paper may be cross-listed in multiple categories, or placed in a category that does not fully reflect its content. The field filter operates solely on these self-reported category codes.
+arXiv categories come from author self-reporting and are stored on each `Paper` record, but are not used for retrieval filtering. A paper may be cross-listed in multiple categories, or placed in a category that does not fully reflect its content.
 
 ---
 

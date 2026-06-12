@@ -59,7 +59,7 @@ Records are sorted by `arxiv_id` for reproducibility. Deduplication is by `arxiv
 
 ## Taxonomy coverage
 
-The system supports all 14 top-level arXiv field groups defined in `configs/arxiv_taxonomy.yaml`:
+The harvested corpus spans all 14 top-level arXiv field groups:
 
 | Field | Example categories |
 |---|---|

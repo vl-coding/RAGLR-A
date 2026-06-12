@@ -12,7 +12,6 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--query", required=True)
-    parser.add_argument("--fields", nargs="+", default=["all"])
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--no-qwen", action="store_true")
     parser.add_argument("--no-justification", action="store_true")
@@ -24,7 +23,6 @@ def main():
 
     response = pipeline.run(
         query=args.query,
-        selected_fields=args.fields,
         top_k=args.top_k,
         use_qwen_prefilter=not args.no_qwen,
         use_claude_justification=not args.no_justification,

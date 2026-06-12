@@ -2,7 +2,7 @@
 
 ## Overview
 
-RAGLR-A is a hybrid retrieval-augmented generation system built on top of arXiv metadata. It combines field-based filtering, sparse and dense retrieval, LLM query expansion (HyDE), and LLM-generated relevance justifications into a single end-to-end pipeline.
+RAGLR-A is a hybrid retrieval-augmented generation system built on top of arXiv metadata. It combines a keyword-based candidate prefilter, sparse and dense retrieval, LLM query expansion (HyDE), and LLM-generated relevance justifications into a single end-to-end pipeline.
 
 ---
 
@@ -13,20 +13,15 @@ User query
     │
     ▼
 ┌─────────────────────────────┐
-│  1. Field filter             │  Narrows corpus to allowed arXiv categories
-└─────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────┐
-│  2. Qwen keyword prefilter   │  Qwen2.5-3B-Instruct extracts ≤18 keywords
+│  1. Qwen keyword prefilter   │  Qwen2.5-3B-Instruct extracts ≤18 keywords
 │                             │  → intersected with inverted index
-│                             │  → further reduces candidate set
+│                             │  → reduces candidate set
 └─────────────────────────────┘
     │
     ├──────────────────────────────────────────────┐
     ▼                                              ▼
 ┌─────────────────────┐              ┌─────────────────────────┐
-│  3. Claude HyDE      │              │  (BM25 uses raw query)   │
+│  2. Claude HyDE      │              │  (BM25 uses raw query)   │
 │  Generates a         │              └─────────────────────────┘
 │  hypothetical        │
 │  abstract as         │
@@ -36,7 +31,7 @@ User query
     ├──────────────────────────────────────────────┐
     ▼                                              ▼
 ┌─────────────────────┐              ┌─────────────────────────┐
-│  4. Dense retrieval  │              │  5. BM25 retrieval       │
+│  3. Dense retrieval  │              │  4. BM25 retrieval       │
 │  SBERT embeddings   │              │  rank-bm25 over          │
 │  + ChromaDB         │              │  tokenized abstracts     │
 │  top-200 candidates │              │  top-200 candidates      │
@@ -45,14 +40,14 @@ User query
     └──────────────────────┬───────────────────────┘
                            ▼
               ┌────────────────────────┐
-              │  6. Reciprocal Rank    │
+              │  5. Reciprocal Rank    │
               │  Fusion (k=60)         │
               │  Single fused ranking  │
               └────────────────────────┘
                            │
                            ▼
               ┌────────────────────────┐
-              │  7. Claude justifier   │
+              │  6. Claude justifier   │
               │  Per-paper: contribu-  │
               │  tion, justification,  │
               │  relevance score,      │
@@ -67,29 +62,25 @@ User query
 
 ## Stage details
 
-### 1. Field filter (`preprocessing.py`)
+### 1. Qwen keyword prefilter (`qwen_prefilter.py`, `keyword_index.py`)
 
-The arXiv taxonomy (`configs/arxiv_taxonomy.yaml`) defines 14 top-level fields, each with a list of arXiv category codes (e.g. `cs.AI`, `stat.ML`). Selecting `"all"` disables filtering. Any paper whose `categories` list overlaps the allowed set passes through.
-
-### 2. Qwen keyword prefilter (`qwen_prefilter.py`, `keyword_index.py`)
-
-`QwenKeywordExtractor` loads `Qwen/Qwen2.5-3B-Instruct` locally and prompts it to return a JSON list of ≤18 academic keywords for the query. Each keyword is tokenized and looked up in a prebuilt inverted index (`keyword_inverted_index.pkl`). The union of matching paper IDs is intersected with the field-filtered set. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full field-filtered set is used.
+`QwenKeywordExtractor` loads `Qwen/Qwen2.5-3B-Instruct` locally and prompts it to return a JSON list of ≤18 academic keywords for the query. Each keyword is tokenized and looked up in a prebuilt inverted index (`keyword_inverted_index.pkl`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
 
 The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs. It is built at index time from paper titles and abstracts.
 
-### 3. Claude HyDE (`hyde.py`)
+### 2. Claude HyDE (`hyde.py`)
 
 Hypothetical Document Embeddings: Claude Sonnet is prompted to write a 3–5 sentence hypothetical academic abstract that would be highly relevant to the query. This abstract is used as the dense query vector instead of the raw query string. HyDE improves recall by bridging the vocabulary gap between short user queries and longer paper abstracts.
 
-### 4. Dense retrieval (`dense_retriever.py`)
+### 3. Dense retrieval (`dense_retriever.py`)
 
 `sentence-transformers/all-MiniLM-L6-v2` encodes both papers (at index time) and the HyDE query (at search time) with L2-normalized embeddings. Vectors are stored in a ChromaDB persistent collection. At query time, a nearest-neighbor search returns up to `dense_candidates` (default 200) results from the candidate set, then post-filters by candidate ID.
 
-### 5. BM25 retrieval (`bm25_retriever.py`)
+### 4. BM25 retrieval (`bm25_retriever.py`)
 
 `BM25Okapi` from `rank-bm25` is built over tokenized paper texts (title + abstract). At query time, BM25 scores are computed for all papers, then filtered to the candidate set and the top `bm25_candidates` (default 200) are returned.
 
-### 6. Reciprocal Rank Fusion (`rrf.py`)
+### 5. Reciprocal Rank Fusion (`rrf.py`)
 
 RRF combines the dense and BM25 ranked lists without requiring score calibration:
 
@@ -100,7 +91,7 @@ RRF_score(d) = Σ  1 / (k + rank_i(d))
 
 Default k=60. The fused list is sorted by descending RRF score, and per-document `dense_rank` and `bm25_rank` are tracked for diagnostics.
 
-### 7. Claude justifier (`justifier.py`)
+### 6. Claude justifier (`justifier.py`)
 
 For each of the top-k results, Claude Sonnet receives the query, paper title, and abstract and returns structured JSON:
 
@@ -153,7 +144,6 @@ Per-query diagnostics included in every `SearchResponse`.
 | Field | Description |
 |---|---|
 | `total_corpus_size` | Papers before any filter |
-| `field_filtered_size` | After field filter |
 | `keyword_filtered_size` | After keyword prefilter |
 | `reduction_percent_after_keyword_filter` | Search-space reduction % |
 | `generated_keywords` | Keywords from Qwen |
@@ -181,17 +171,15 @@ models:
   claude_model: claude-sonnet-4-6
 ```
 
-`configs/arxiv_taxonomy.yaml` defines the full arXiv field hierarchy. Each field entry has a `label` (human-readable) and `categories` (list of arXiv codes, or `"*"` for all).
-
 ---
 
 ## Interfaces
 
 | Interface | Entry point | Notes |
 |---|---|---|
-| Streamlit UI | `app/streamlit_app.py` | Interactive field/subcategory selection |
-| FastAPI | `api/main.py` | REST endpoints: `/search`, `/fields`, `/health` |
-| CLI | `scripts/run_query.py` | `--query`, `--fields`, `--top-k`, `--no-qwen`, `--no-justification` |
+| Streamlit UI | `app/streamlit_app.py` | Query input, progress tracking, results display |
+| FastAPI | `api/main.py` | REST endpoints: `/search`, `/health` |
+| CLI | `scripts/run_query.py` | `--query`, `--top-k`, `--no-qwen`, `--no-justification` |
 
 ---
 

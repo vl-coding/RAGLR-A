@@ -7,12 +7,6 @@ def load_config(config_path: str = "configs/config.yaml") -> dict:
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    taxonomy_path = config.get("paths", {}).get("taxonomy", "configs/arxiv_taxonomy.yaml")
-    with open(taxonomy_path, "r", encoding="utf-8") as f:
-        taxonomy = yaml.safe_load(f)
-
-    config["academic_fields"] = taxonomy["fields"]
-    config["category_labels"] = taxonomy.get("category_labels", {})
     return config
 
 

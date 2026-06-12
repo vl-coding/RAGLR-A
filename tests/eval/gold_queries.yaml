@@ -1,0 +1,45 @@
+# Gold query set for retrieval evaluation.
+#
+# Each entry is one test query plus a small set of "known-relevant" arxiv_ids
+# (canonical/seed papers for that topic). These are used as a lower-bound
+# qrels set for:
+#   - prefilter recall (does the qwen keyword prefilter drop these ids?)
+#   - end-to-end Recall@k / Precision@k / NDCG@k / MRR on the final results
+#
+# IMPORTANT: verify every relevant_id actually exists in
+# data/processed/arxiv_papers.jsonl before relying on these numbers --
+# a missing id will silently count as "not retrieved" and deflate recall.
+# Expand each list with a few more known-relevant papers per topic once
+# verified; a single seed id per query makes Recall@k very noisy.
+
+- query: "transformer architectures for sequence modeling"
+  relevant_ids:
+    - "1706.03762"  # Attention Is All You Need
+
+- query: "pretrained language models for natural language understanding"
+  relevant_ids:
+    - "1810.04805"  # BERT
+
+- query: "parameter-efficient fine-tuning of large language models"
+  relevant_ids:
+    - "2106.09685"  # LoRA
+
+- query: "vision transformers for image classification"
+  relevant_ids:
+    - "2010.11929"  # An Image is Worth 16x16 Words (ViT)
+
+- query: "contrastive learning for self-supervised visual representations"
+  relevant_ids:
+    - "2002.05709"  # SimCLR
+
+- query: "denoising diffusion probabilistic models for image generation"
+  relevant_ids:
+    - "2006.11239"  # DDPM
+
+- query: "graph neural networks with attention mechanisms"
+  relevant_ids:
+    - "1710.10903"  # Graph Attention Networks
+
+- query: "contrastive language-image pretraining for zero-shot transfer"
+  relevant_ids:
+    - "2103.00020"  # CLIP

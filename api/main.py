@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -52,7 +52,6 @@ def client_ip(request: Request) -> str:
 
 class SearchRequest(BaseModel):
     query: str
-    selected_fields: List[str] = ["all"]
     top_k: int = 10
     use_qwen_prefilter: bool = True
     use_claude_justification: bool = True
@@ -107,16 +106,7 @@ async def search(request: Request, body: SearchRequest) -> SearchResponse:
     pipeline = get_pipeline()
     return pipeline.run(
         query=body.query,
-        selected_fields=body.selected_fields,
         top_k=body.top_k,
         use_qwen_prefilter=body.use_qwen_prefilter,
         use_claude_justification=body.use_claude_justification,
     )
-
-
-@app.get("/fields")
-async def list_fields() -> dict:
-    return {
-        key: data["label"]
-        for key, data in config["academic_fields"].items()
-    }

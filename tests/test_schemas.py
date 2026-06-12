@@ -18,12 +18,9 @@ def make_paper(**kwargs) -> Paper:
 def make_trace(**kwargs) -> RetrievalTrace:
     defaults = dict(
         total_corpus_size=1000,
-        field_filtered_size=500,
         keyword_filtered_size=100,
-        reduction_percent_after_field_filter=50.0,
         reduction_percent_after_keyword_filter=90.0,
         generated_keywords=["transformer", "attention"],
-        selected_fields=["computer_science"],
         hyde_document="A hypothetical abstract.",
         dense_latency_seconds=0.5,
         bm25_latency_seconds=0.1,

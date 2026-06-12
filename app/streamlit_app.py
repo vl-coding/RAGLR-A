@@ -44,57 +44,6 @@ with st.sidebar:
     else:
         st.error(LIMIT_MESSAGE)
 
-    field_options = {d["label"]: k for k, d in config["academic_fields"].items()}
-    category_labels = config.get("category_labels", {})
-
-    all_category_codes = sorted(
-        cat
-        for field_data in config["academic_fields"].values()
-        for cat in (
-            field_data["categories"]
-            if isinstance(field_data.get("categories"), list)
-            else []
-        )
-    )
-
-    category_to_field_label = {
-        cat: field_data["label"]
-        for field_data in config["academic_fields"].values()
-        if isinstance(field_data.get("categories"), list)
-        for cat in field_data["categories"]
-    }
-
-    if "academic_fields_select" not in st.session_state:
-        st.session_state["academic_fields_select"] = ["All arXiv Fields"]
-    if "subcategory_select" not in st.session_state:
-        st.session_state["subcategory_select"] = []
-
-    def _sync_academic_fields():
-        selected_cats = st.session_state["subcategory_select"]
-        needed_labels = {
-            category_to_field_label[c] for c in selected_cats if c in category_to_field_label
-        }
-        updated = set(st.session_state["academic_fields_select"]) | needed_labels
-        if "All arXiv Fields" in updated and len(updated) > 1:
-            updated.discard("All arXiv Fields")
-        st.session_state["academic_fields_select"] = list(updated)
-
-    selected_labels = st.multiselect(
-        "Academic fields",
-        options=[d["label"] for d in config["academic_fields"].values()],
-        key="academic_fields_select",
-    )
-
-    selected_fields = [field_options[label] for label in selected_labels]
-
-    selected_categories = st.multiselect(
-        "Restrict to specific arXiv subcategories (optional)",
-        options=all_category_codes,
-        format_func=lambda code: f"{category_labels.get(code, code)} ({code})",
-        key="subcategory_select",
-        on_change=_sync_academic_fields,
-    )
-
     top_k = config["retrieval"]["default_top_k"]
     use_qwen = st.checkbox("Qwen keyword prefilter", value=True)
     use_justification = st.checkbox("Claude justifications", value=True)
@@ -128,20 +77,11 @@ if limit_reached and not search_button:
 if search_button:
     if not query.strip():
         st.warning("Please enter a research question.")
-    elif not selected_fields and not selected_categories:
-        st.warning("Please select at least one academic field or subcategory.")
     else:
         # Load pipeline on first use
         if st.session_state.pipeline is None:
             with st.spinner("Loading pipeline (first load takes ~30s) ..."):
                 st.session_state.pipeline = RagLiteraturePipeline(config)
-
-        if selected_categories:
-            run_fields = ["all"]
-            custom_categories = selected_categories
-        else:
-            run_fields = selected_fields if selected_fields else ["all"]
-            custom_categories = None
 
         progress_bar = st.progress(0, text="Starting search ...")
 
@@ -150,11 +90,9 @@ if search_button:
 
         response = st.session_state.pipeline.run(
             query=query,
-            selected_fields=run_fields,
             top_k=top_k,
             use_qwen_prefilter=use_qwen,
             use_claude_justification=use_justification,
-            custom_categories=custom_categories,
             progress_callback=_update_progress,
         )
 
@@ -166,15 +104,9 @@ if search_button:
         # Retrieval trace
         # ---------------------------------------------------------------
         st.subheader("How the search narrowed down 3M+ papers")
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         c1.metric("Total corpus", f"{response.trace.total_corpus_size:,}")
         c2.metric(
-            "After field filter",
-            f"{response.trace.field_filtered_size:,}",
-            delta=f"-{response.trace.reduction_percent_after_field_filter:.0f}%",
-            delta_color="off",
-        )
-        c3.metric(
             "After keyword filter",
             f"{response.trace.keyword_filtered_size:,}",
             delta=f"-{response.trace.reduction_percent_after_keyword_filter:.0f}%",
@@ -195,11 +127,10 @@ if search_button:
             st.warning(
                 f"Only {len(response.results)} of {top_k} papers were found for this query.\n\n"
                 "**Why this happens:** the search narrows 3M+ arXiv papers down step by step "
-                "(academic field, keywords, and semantic similarity). If your topic is very "
+                "(keywords and semantic similarity). If your topic is very "
                 "specific, niche, or uses uncommon terminology, fewer papers may survive "
                 "every filtering step.\n\n"
                 "**Tips to get more results:**\n"
-                "- Broaden your academic field selection, or remove subcategory restrictions.\n"
                 "- Use more general search terms (e.g. \"transformer time series forecasting\" "
                 "instead of \"sparse attention transformers for irregular multivariate clinical time series\").\n"
                 "- Try rephrasing with synonyms or related terminology.\n"
