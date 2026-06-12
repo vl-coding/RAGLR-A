@@ -6,8 +6,12 @@ _PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
 class ClaudeHyDE:
-    def __init__(self, model_name: str):
-        self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    def __init__(self, model_name: str, max_retries: int = 5, timeout_seconds: float = 60.0):
+        self.client = Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            max_retries=max_retries,
+            timeout=timeout_seconds,
+        )
         self.model_name = model_name
 
         template = (_PROMPTS_DIR / "claude_hyde_v1.txt").read_text(encoding="utf-8")

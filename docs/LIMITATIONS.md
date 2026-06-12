@@ -47,7 +47,7 @@ The keyword extractor is a 0.5B-parameter model running locally. It may generate
 Claude's relevance and specificity scores (1–10) are not calibrated across queries. A score of 8 for one query may not be comparable to a score of 8 for another. Scores should be used for relative ranking within a single result set, not for cross-query comparisons. Justifications may occasionally be verbose, overly positive, or hallucinated if Claude lacks domain expertise in the subject area.
 
 **API rate limits and cost**
-Claude is called once for HyDE and once per top-k result for justification. With `top_k=10`, each query makes 11 Claude API calls. High-volume use will accumulate cost and may hit rate limits.
+Claude is called once for HyDE and once per top-k result for justification. With `top_k=10`, each query makes 11 Claude API calls. High-volume use will accumulate cost. The client retries rate-limited/transient errors with backoff (`models.claude_max_retries`, `models.claude_timeout_seconds` in config.yaml), and justification concurrency is capped (`models.claude_justifier_max_concurrency`, default 5) to avoid a thundering herd of simultaneous requests at high `top_k`. There is no request batching or response caching.
 
 ---
 

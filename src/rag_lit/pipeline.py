@@ -65,8 +65,17 @@ class RagLiteraturePipeline:
 
         self._qwen_model_name = config["models"]["qwen_model"]
         self._qwen: Optional[QwenKeywordExtractor] = None
-        self.hyde = ClaudeHyDE(config["models"]["claude_model"])
-        self.justifier = ClaudeJustifier(config["models"]["claude_model"])
+        claude_max_retries = config["models"].get("claude_max_retries", 5)
+        claude_timeout_seconds = config["models"].get("claude_timeout_seconds", 60.0)
+        self.hyde = ClaudeHyDE(
+            config["models"]["claude_model"], claude_max_retries, claude_timeout_seconds
+        )
+        self.justifier = ClaudeJustifier(
+            config["models"]["claude_model"], claude_max_retries, claude_timeout_seconds
+        )
+        self._justifier_max_concurrency = config["models"].get(
+            "claude_justifier_max_concurrency", 5
+        )
 
         self.dense = DenseRetriever(
             model_name=config["models"]["embedding_model"],
@@ -306,7 +315,8 @@ class RagLiteraturePipeline:
                     abstract=paper.abstract,
                 )
 
-            with ThreadPoolExecutor(max_workers=top_k) as executor:
+            justify_workers = min(top_k, self._justifier_max_concurrency)
+            with ThreadPoolExecutor(max_workers=justify_workers) as executor:
                 futures = {executor.submit(_justify, item): item for item in top_items}
                 for future in as_completed(futures):
                     doc_id, result = future.result()

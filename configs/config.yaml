@@ -22,6 +22,9 @@ models:
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
   qwen_model: "Qwen/Qwen2.5-0.5B-Instruct"
   claude_model: "claude-sonnet-4-6"
+  claude_max_retries: 5
+  claude_timeout_seconds: 60
+  claude_justifier_max_concurrency: 5
 
 demo:
   rate_limit_requests: 3
