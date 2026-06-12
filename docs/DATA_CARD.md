@@ -20,7 +20,7 @@ Each record corresponds to one arXiv preprint. The following fields are extracte
 | `title` | `dc:title` | Whitespace-normalized |
 | `abstract` | `dc:description` | First `dc:description` value |
 | `authors` | `dc:creator` | All creator values |
-| `categories` | `dc:subject` | Parsed via arXiv category regex |
+| `categories` | `dc:subject` | Parsed via arXiv category regex; **empty for ~99.99% of records** — arXiv's `oai_dc` feed rarely populates `dc:subject` with category codes. See [LIMITATIONS.md](LIMITATIONS.md). |
 | `year` | `dc:date` | First 4-digit year found; falls back to arXiv ID prefix |
 | `url` | `dc:identifier` | `https://arxiv.org/abs/<id>` |
 
@@ -47,11 +47,13 @@ Papers are stored as newline-delimited JSON (`data/processed/arxiv_papers.jsonl`
   "title": "Example Paper Title",
   "abstract": "We present a method for ...",
   "authors": ["Author One", "Author Two"],
-  "categories": ["cs.AI", "cs.LG"],
+  "categories": [],
   "year": 2023,
   "url": "https://arxiv.org/abs/2301.07041"
 }
 ```
+
+In practice `categories` is `[]` for nearly all records (see note above) — shown here for schema completeness, not as a representative example.
 
 Records are sorted by `arxiv_id` for reproducibility. Deduplication is by `arxiv_id` — the most recently harvested version of a paper overwrites earlier versions.
 
@@ -78,7 +80,7 @@ The harvested corpus spans all 14 top-level arXiv field groups:
 | Electrical Engineering & Systems Science | eess.SP, eess.IV |
 | Other Physics | gr-qc, quant-ph, math-ph |
 
-Category codes come from author self-reporting and reflect arXiv's taxonomy at harvest time. A paper may appear in multiple field groups if it is cross-listed.
+This table describes arXiv's taxonomy as a reference for the corpus's topical scope, not the populated `categories` field — which, as noted above, is empty for nearly all harvested records. Category codes, when present, come from author self-reporting and reflect arXiv's taxonomy at harvest time. A paper may appear in multiple field groups if it is cross-listed.
 
 ---
 
@@ -101,7 +103,7 @@ After each harvest or index build, `artifacts/manifest.json` records:
 
 - Total paper count
 - Harvest timestamp
-- Category distribution (counts per arXiv category code)
+- Category distribution (counts per arXiv category code) — currently near-zero across the board, since `categories` is empty for ~99.99% of records
 - Year range of the corpus
 - Update mode used
 
