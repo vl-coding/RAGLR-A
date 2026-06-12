@@ -189,6 +189,21 @@ def test_pipeline_debug_output():
     assert debug.dense_results
     assert debug.dense_results_raw_query is not None
     assert debug.bm25_results
+    assert debug.fused_results_raw_query is not None
+    assert {item["doc_id"] for item in debug.fused_results_raw_query} == {
+        p.arxiv_id for p in SAMPLE_PAPERS
+    }
+
+
+def test_pipeline_no_fused_raw_query_without_ablation():
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=2,
+        debug=True,
+        hyde_ablation=False,
+    )
+    assert response.debug.fused_results_raw_query is None
 
 
 def test_pipeline_no_debug_by_default():

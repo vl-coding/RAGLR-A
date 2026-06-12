@@ -18,10 +18,23 @@
 # canonical/seminal papers chosen independent of any retrieval method) to
 # dilute the bio/math/physics dense-search bias in pooled metrics and give
 # the HyDE-vs-raw Wilcoxon test more statistical power.
+#
+# issue #2: each entry now carries a `stratum` tag for the HyDE ablation:
+#   - terminology_aligned: the query's key phrase already matches the
+#     vocabulary canonical papers/abstracts in this topic use (e.g. "vision
+#     transformers" / ViT, "contrastive language-image pretraining" / CLIP),
+#     so HyDE's hypothetical-abstract rewrite is expected to help little.
+#   - terminology_gap: the query is phrased as a broad/colloquial topic
+#     description that doesn't closely match how the canonical papers
+#     describe themselves, where HyDE's rewrite-to-abstract-style is
+#     hypothesized to help most.
+# All 6 biology/math/physics queries are terminology_aligned by construction
+# (their relevant_ids were selected by dense-searching this exact query text).
 
 # --- Computer science / ML ---------------------------------------------
 
 - query: "transformer architectures for sequence modeling"
+  stratum: terminology_gap
   relevant_ids:
     - "1706.03762"  # Attention Is All You Need
     - "1901.02860"  # Transformer-XL
@@ -29,6 +42,7 @@
     - "2005.14165"  # GPT-3 (Language Models are Few-Shot Learners)
 
 - query: "pretrained language models for natural language understanding"
+  stratum: terminology_aligned
   relevant_ids:
     - "1810.04805"  # BERT
     - "1907.11692"  # RoBERTa
@@ -36,6 +50,7 @@
     - "2003.10555"  # ELECTRA
 
 - query: "parameter-efficient fine-tuning of large language models"
+  stratum: terminology_aligned
   relevant_ids:
     - "2106.09685"  # LoRA
     - "1902.00751"  # Parameter-Efficient Transfer Learning for NLP (Adapters)
@@ -43,6 +58,7 @@
     - "2110.07602"  # P-Tuning v2
 
 - query: "vision transformers for image classification"
+  stratum: terminology_aligned
   relevant_ids:
     - "2010.11929"  # An Image is Worth 16x16 Words (ViT)
     - "2012.12877"  # DeiT (data-efficient image transformers)
@@ -50,6 +66,7 @@
     - "2106.04560"  # Scaling Vision Transformers
 
 - query: "contrastive learning for self-supervised visual representations"
+  stratum: terminology_aligned
   relevant_ids:
     - "2002.05709"  # SimCLR
     - "1911.05722"  # MoCo
@@ -57,6 +74,7 @@
     - "2006.07733"  # BYOL
 
 - query: "denoising diffusion probabilistic models for image generation"
+  stratum: terminology_aligned
   relevant_ids:
     - "2006.11239"  # DDPM
     - "2010.02502"  # DDIM
@@ -64,6 +82,7 @@
     - "2105.05233"  # Diffusion Models Beat GANs on Image Synthesis
 
 - query: "graph neural networks with attention mechanisms"
+  stratum: terminology_aligned
   relevant_ids:
     - "1710.10903"  # Graph Attention Networks
     - "1609.02907"  # Graph Convolutional Networks (Kipf & Welling)
@@ -71,6 +90,7 @@
     - "1810.00826"  # GIN (How Powerful are Graph Neural Networks?)
 
 - query: "contrastive language-image pretraining for zero-shot transfer"
+  stratum: terminology_aligned
   relevant_ids:
     - "2103.00020"  # CLIP
     - "2102.05918"  # ALIGN
@@ -78,6 +98,7 @@
     - "2205.01917"  # CoCa
 
 - query: "reinforcement learning from human feedback for language model alignment"
+  stratum: terminology_aligned
   relevant_ids:
     - "1706.03741"  # Deep Reinforcement Learning from Human Preferences
     - "1707.06347"  # Proximal Policy Optimization Algorithms (PPO)
@@ -85,6 +106,7 @@
     - "2305.18290"  # Direct Preference Optimization (DPO)
 
 - query: "generative adversarial networks for image synthesis"
+  stratum: terminology_aligned
   relevant_ids:
     - "1406.2661"   # Generative Adversarial Networks (Goodfellow et al.)
     - "1511.06434"  # DCGAN (Unsupervised Representation Learning with Deep Convolutional GANs)
@@ -92,6 +114,7 @@
     - "1812.04948"  # StyleGAN (A Style-Based Generator Architecture for GANs)
 
 - query: "word embeddings and distributed representations for natural language processing"
+  stratum: terminology_aligned
   relevant_ids:
     - "1301.3781"   # word2vec (Efficient Estimation of Word Representations in Vector Space)
     - "1310.4546"   # Distributed Representations of Words and Phrases and their Compositionality
@@ -99,6 +122,7 @@
     - "1802.05365"  # ELMo (Deep contextualized word representations)
 
 - query: "sequence-to-sequence learning and attention for neural machine translation"
+  stratum: terminology_aligned
   relevant_ids:
     - "1409.3215"   # Sequence to Sequence Learning with Neural Networks
     - "1409.0473"   # Neural Machine Translation by Jointly Learning to Align and Translate (Bahdanau attention)
@@ -106,6 +130,7 @@
     - "1609.08144"  # Google's Neural Machine Translation System (GNMT)
 
 - query: "adaptive gradient-based optimization methods for training neural networks"
+  stratum: terminology_gap
   relevant_ids:
     - "1412.6980"   # Adam: A Method for Stochastic Optimization
     - "1212.5701"   # ADADELTA: An Adaptive Learning Rate Method
@@ -113,6 +138,7 @@
     - "1904.09237"  # On the Convergence of Adam and Beyond (AMSGrad)
 
 - query: "neural architecture search for efficient convolutional networks"
+  stratum: terminology_aligned
   relevant_ids:
     - "1611.01578"  # Neural Architecture Search with Reinforcement Learning
     - "1806.09055"  # DARTS: Differentiable Architecture Search
@@ -120,6 +146,7 @@
     - "1704.04861"  # MobileNets: Efficient CNNs for Mobile Vision Applications
 
 - query: "deep learning methods for object detection in images"
+  stratum: terminology_gap
   relevant_ids:
     - "1506.01497"  # Faster R-CNN
     - "1506.02640"  # YOLO (You Only Look Once)
@@ -127,6 +154,7 @@
     - "1703.06870"  # Mask R-CNN
 
 - query: "knowledge distillation for compressing neural network models"
+  stratum: terminology_aligned
   relevant_ids:
     - "1503.02531"  # Distilling the Knowledge in a Neural Network
     - "1910.01108"  # DistilBERT
@@ -134,6 +162,7 @@
     - "1606.07947"  # Sequence-Level Knowledge Distillation
 
 - query: "federated learning across decentralized data"
+  stratum: terminology_aligned
   relevant_ids:
     - "1602.05629"  # Communication-Efficient Learning of Deep Networks from Decentralized Data (FedAvg)
     - "1812.06127"  # Federated Optimization in Heterogeneous Networks (FedProx)
@@ -141,6 +170,7 @@
     - "1912.04977"  # Advances and Open Problems in Federated Learning
 
 - query: "normalization techniques for training deep neural networks"
+  stratum: terminology_gap
   relevant_ids:
     - "1502.03167"  # Batch Normalization
     - "1607.06450"  # Layer Normalization
@@ -148,6 +178,7 @@
     - "1803.08494"  # Group Normalization
 
 - query: "variational autoencoders for generative modeling"
+  stratum: terminology_aligned
   relevant_ids:
     - "1312.6114"   # Auto-Encoding Variational Bayes
     - "1401.4082"   # Stochastic Backpropagation and Approximate Inference in Deep Generative Models
@@ -155,6 +186,7 @@
     - "1711.00937"  # VQ-VAE (Neural Discrete Representation Learning)
 
 - query: "sparse mixture-of-experts models for scaling neural networks"
+  stratum: terminology_aligned
   relevant_ids:
     - "1701.06538"  # Outrageously Large Neural Networks: The Sparsely-Gated MoE Layer
     - "2006.16668"  # GShard
@@ -164,6 +196,7 @@
 # --- Biological sciences -------------------------------------------------
 
 - query: "deep learning for protein structure prediction"
+  stratum: terminology_aligned
   relevant_ids:
     - "2007.08383"  # Deep Learning in Protein Structural Modeling and Design
     - "2503.13522"  # Advanced Deep Learning Methods for Protein Structure Prediction and Design
@@ -171,6 +204,7 @@
     - "2501.01477"  # A Survey of Deep Learning Methods in Protein Bioinformatics and its Impact on Protein Design
 
 - query: "single-cell transcriptomics analysis methods"
+  stratum: terminology_aligned
   relevant_ids:
     - "1704.01379"  # Exponential scaling of single-cell RNA-seq in the last decade
     - "2412.13591"  # Single-cell spatial (scs) omics: Recent developments in data analysis
@@ -180,6 +214,7 @@
 # --- Mathematics -----------------------------------------------------------
 
 - query: "convergence analysis of stochastic gradient descent optimization"
+  stratum: terminology_aligned
   relevant_ids:
     - "2103.14350"  # The Convergence of the Stochastic Gradient Descent (SGD): A Self-Contained Proof
     - "1904.01517"  # Convergence rates for the stochastic gradient descent method for non-convex objective functions
@@ -187,6 +222,7 @@
     - "2301.11235"  # Handbook of Convergence Theorems for (Stochastic) Gradient Methods
 
 - query: "topological data analysis and persistent homology"
+  stratum: terminology_aligned
   relevant_ids:
     - "1905.13400"  # A Primer on Persistent Homology of Finite Metric Spaces
     - "2406.17045"  # Topological Data Analysis via Undergraduate Linear Algebra
@@ -196,6 +232,7 @@
 # --- Physics -----------------------------------------------------------
 
 - query: "quantum error correction codes for fault-tolerant computing"
+  stratum: terminology_aligned
   relevant_ids:
     - "quant-ph/9605031"  # Fault-Tolerant Error Correction with Efficient Quantum Codes
     - "0905.2794"         # Quantum Error Correction for Beginners
@@ -203,6 +240,7 @@
     - "quant-ph/0611026"  # Introduction to error correcting codes in quantum computers
 
 - query: "machine learning methods for lattice quantum field theory"
+  stratum: terminology_aligned
   relevant_ids:
     - "2202.05838"  # Applications of Machine Learning to Lattice Quantum Field Theory
     - "2207.00283"  # Learning Lattice Quantum Field Theories with Equivariant Continuous Flows

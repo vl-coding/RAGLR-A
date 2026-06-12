@@ -317,6 +317,17 @@ class RagLiteraturePipeline:
         fused = reciprocal_rank_fusion(ranked_lists, k=self.config["retrieval"]["rrf_k"])
         top_items = fused[:top_k]
 
+        fused_raw_query = None
+        if hyde_ablation:
+            raw_ranked_lists = [dense_results_raw_query, bm25_results]
+            if bm25_delta_results:
+                raw_ranked_lists.append(bm25_delta_results)
+            if canonical_results:
+                raw_ranked_lists.append(canonical_results)
+            fused_raw_query = reciprocal_rank_fusion(
+                raw_ranked_lists, k=self.config["retrieval"]["rrf_k"]
+            )
+
         _report("Loading paper details ...", 0.8)
         top_papers = {item["doc_id"]: self._load_paper(item["doc_id"]) for item in top_items}
 
@@ -393,6 +404,7 @@ class RagLiteraturePipeline:
                 bm25_results=bm25_results,
                 bm25_delta_results=bm25_delta_results,
                 canonical_results=canonical_results,
+                fused_results_raw_query=fused_raw_query,
             )
 
         return SearchResponse(

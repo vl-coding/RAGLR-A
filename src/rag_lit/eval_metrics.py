@@ -1,6 +1,8 @@
 import math
+import random
+import statistics
 from pathlib import Path
-from typing import Dict, List, Sequence, Set
+from typing import Dict, List, Optional, Sequence, Set
 
 import yaml
 
@@ -55,6 +57,47 @@ def set_recall(candidate_ids: Set[str], relevant_ids: Set[str]) -> float:
         return 0.0
     hits = sum(1 for doc_id in relevant_ids if doc_id in candidate_ids)
     return hits / len(relevant_ids)
+
+
+def rank_of(doc_id: str, ranked_ids: Sequence[str]) -> Optional[int]:
+    """1-based rank of doc_id in ranked_ids, or None if it doesn't appear."""
+    for i, candidate in enumerate(ranked_ids, start=1):
+        if candidate == doc_id:
+            return i
+    return None
+
+
+def bootstrap_ci(
+    values: Sequence[float],
+    n_resamples: int = 1000,
+    seed: int = 42,
+    ci: float = 0.95,
+) -> Dict[str, Optional[float]]:
+    """Bootstrap CI on the mean of values via resampling with replacement.
+
+    Returns {"mean", "low", "high"} (rounded to 4 dp), or all-None for an
+    empty input.
+    """
+    if not values:
+        return {"mean": None, "low": None, "high": None}
+
+    rng = random.Random(seed)
+    n = len(values)
+    means = []
+    for _ in range(n_resamples):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        means.append(statistics.mean(sample))
+    means.sort()
+
+    alpha = (1 - ci) / 2
+    low_idx = int(alpha * n_resamples)
+    high_idx = min(int((1 - alpha) * n_resamples), n_resamples - 1)
+
+    return {
+        "mean": round(statistics.mean(values), 4),
+        "low": round(means[low_idx], 4),
+        "high": round(means[high_idx], 4),
+    }
 
 
 def load_gold_queries(path: str = "tests/eval/gold_queries.yaml") -> List[dict]:

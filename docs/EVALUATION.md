@@ -14,7 +14,7 @@ RAGLR-A has no external ground-truth test collection, so evaluation is built on 
 
 ## Gold query set
 
-`tests/eval/gold_queries.yaml` contains **26 queries**, each with a `query` string and 4 `relevant_ids` (arxiv IDs of papers that are known to exist in `data/processed/arxiv_papers.jsonl` and are topically relevant):
+`tests/eval/gold_queries.yaml` contains **26 queries**, each with a `query` string, a `stratum` tag, and 4 `relevant_ids` (arxiv IDs of papers that are known to exist in `data/processed/arxiv_papers.jsonl` and are topically relevant):
 
 | Domain | # queries | Example |
 |---|---|---|
@@ -25,12 +25,15 @@ RAGLR-A has no external ground-truth test collection, so evaluation is built on 
 
 For the CS/ML queries, `relevant_ids` are canonical/seminal papers for that topic, chosen independent of any retrieval method. For the biology/math/physics queries (where there's no single "canonical" paper), `relevant_ids` are strong topical matches found via dense (SBERT) search over the live corpus, independent of BM25.
 
-**issue #1**: the CS/ML section was expanded from 8 to 20 queries (covering RLHF/DPO, GANs, word embeddings, seq2seq/NMT attention, adaptive optimizers, neural architecture search, object detection, knowledge distillation, federated learning, normalization, VAEs, and sparse MoE — all canonical/seminal papers, none chosen by running any retriever) to dilute the bio/math/physics dense-search bias in pooled metrics and give the `hyde` ablation's Wilcoxon test more statistical power (issue #2). All sections below reflect eval runs against the prior **14-query** set ("Latest results", "Canonical-paper boost results", "RRF k sensitivity"); a re-run against the full 26-query set is needed to refresh those numbers.
+**issue #1**: the CS/ML section was expanded from 8 to 20 queries (covering RLHF/DPO, GANs, word embeddings, seq2seq/NMT attention, adaptive optimizers, neural architecture search, object detection, knowledge distillation, federated learning, normalization, VAEs, and sparse MoE — all canonical/seminal papers, none chosen by running any retriever) to dilute the bio/math/physics dense-search bias in pooled metrics and give the `hyde` ablation's Wilcoxon test more statistical power (issue #2). All sections below reflect eval runs against the prior **14-query** set ("Latest results", "Canonical-paper boost results", "RRF k sensitivity"); a re-run against the full 26-query set is needed to refresh those numbers. The prefilter eval has already been re-run against the full 26-query set (`outputs/eval_report_prefilter_26q.json`): mean `recall_final_candidates = 1.000` across all 26 queries, confirming the 12 new CS/ML queries' `relevant_ids` survive the keyword prefilter.
+
+**issue #2**: each entry also carries a `stratum: terminology_aligned | terminology_gap` tag, used by the `hyde` eval's stratified report (see below). 4/26 queries (1, 13, 15, 18 — "transformer architectures for sequence modeling", "adaptive gradient-based optimization methods...", "deep learning methods for object detection...", "normalization techniques...") are tagged `terminology_gap`: their phrasing is a broad/colloquial topic description that doesn't closely match how the canonical papers describe themselves, which is where HyDE's rewrite-to-abstract-style is hypothesized to help most. The remaining 22 are `terminology_aligned` (including all 6 biology/math/physics queries, by construction — their `relevant_ids` were dense-derived from this exact query text).
 
 To extend the set, add entries in the same format:
 
 ```yaml
 - query: "your research question here"
+  stratum: terminology_aligned  # or terminology_gap
   relevant_ids:
     - "2106.09685"
     - "1706.03762"
@@ -47,9 +50,21 @@ python scripts/evaluate_retrieval.py --evals prefilter hyde e2e calibration --to
 
 `--evals` accepts any combination of `prefilter`, `hyde`, `e2e`, `calibration` (default: all four). Each gold query is run through the real pipeline **once** (`debug=True`, with `hyde_ablation` / `use_claude_justification` enabled as needed) and all requested analyses are derived from that single response — no redundant Qwen/HyDE/Claude calls.
 
+**issue #2 flags** (only take effect when `hyde` is in `--evals`):
+
+```powershell
+python scripts/evaluate_retrieval.py --evals hyde e2e --top-k 10 `
+  --rank-delta-top-n 5000 --pooled-judgments --pool-size 10 --output outputs/eval_report_hyde_v2.json
+```
+
+- `--rank-delta-top-n N` (default 0/off): for each `relevant_id`, run an extra dense search with `top_n=N` for both the HyDE-document and the raw query, and record `rank_raw - rank_hyde` (capped at `N+1` for ids absent from a list). Turns up to `4 * n_queries` mostly-zero NDCG@10 values into per-paper paired rank observations (issue #2 item 2).
+- `--pooled-judgments` (default off): pools the top `--pool-size` ids from the HyDE-fused and raw-fused post-RRF results per query, judges any un-judged pool members with Claude's justifier, and computes NDCG@k for both rankings against the pooled graded relevance — a TREC-style pooled-judgment comparison that doesn't depend on the 4-id qrels (issue #2 item 3). Adds up to `2 * --pool-size` Claude justification calls per query.
+
 Cost/latency notes:
 - Adding `hyde` doubles the dense search (HyDE-document query vs. raw-query). Adding `e2e`/`calibration` adds one Claude justification call per top-k result (10 per query at `--top-k 10`, plus `--decoys` per query for `calibration`).
-- With all four evals (`prefilter hyde e2e calibration`) on the full 14-query set: **~45 sec/query, ~10.5 minutes total** (measured for the run behind the "Latest results" section below).
+- `--rank-delta-top-n 5000` adds two large ChromaDB queries per query (HyDE-document and raw-query against the full final-candidate set) — noticeably slower than the default `dense_candidates` search, but no extra Claude calls.
+- `--pooled-judgments` adds Claude justification calls for any pool members not already in the top-`--top-k` justified results (worst case `2 * --pool-size` per query).
+- With all four evals (`prefilter hyde e2e calibration`) on the full 14-query set: **~45 sec/query, ~10.5 minutes total** (measured for the run behind the "Latest results" section below). The `--rank-delta-top-n`/`--pooled-judgments` flags were not enabled for that run.
 
 ---
 
@@ -63,7 +78,14 @@ Checks whether the Qwen keyword prefilter (and the final candidate set after fal
 
 ### `hyde` — HyDE vs. raw-query dense search
 
-Runs dense (SBERT/ChromaDB) retrieval twice per query: once embedding the Claude-generated HyDE hypothetical document, once embedding the raw query string. Reports `recall_at_k`, `ndcg_at_k`, and `mrr` for both, a win/tie/loss count on NDCG@k, and a Wilcoxon signed-rank test comparing the two NDCG@k distributions.
+Runs dense (SBERT/ChromaDB) retrieval twice per query: once embedding the Claude-generated HyDE hypothetical document, once embedding the raw query string. The report has several layers (issue #2):
+
+- **Dense-stage (pre-RRF)**: `recall_at_k`, `ndcg_at_k`, and `mrr` for both, a win/tie/loss count on NDCG@k, a bootstrap CI on the mean NDCG@k difference, and a Wilcoxon signed-rank test.
+- **Post-RRF end-to-end**: the pipeline also fuses the raw-query dense results with the *same* BM25/delta/canonical ranked lists used for the HyDE-document fusion (`debug.fused_results_raw_query` in `src/rag_lit/schemas.py`), so `precision/recall/ndcg/mrr@k` can be compared end-to-end, holding everything except the dense-stage query identical (item 1).
+- **Rank-delta @ `--rank-delta-top-n`** (opt-in): for each `relevant_id`, `rank_raw - rank_hyde` from a large-`top_n` dense search, with a bootstrap CI on the mean delta (item 2). Positive = HyDE ranks the paper higher (better).
+- **Stratified by `stratum`**: separate dense-stage NDCG@k diff + bootstrap CI for `terminology_gap` vs. `terminology_aligned` queries (item 4).
+- **TREC-style pooled-judgment NDCG@k** (opt-in via `--pooled-judgments`): NDCG@k for both rankings against Claude-judged graded relevance over the pooled top-`--pool-size` results from each ranking, instead of the 4-id qrels (item 3).
+- A closing note reiterates that Claude-as-judge scores aren't calibrated across queries (item 6; see `docs/LIMITATIONS.md`).
 
 ### `e2e` — end-to-end relevance
 
@@ -209,25 +231,21 @@ Tracked in [issue #1](https://github.com/vl-coding/RAGLR-A/issues/1) (qrels) and
 
 - **Small qrels per query.** Each query has only 4 `relevant_ids`, which is a *lower bound* on relevance — there are almost certainly other relevant papers in a 3M-paper corpus that aren't in the gold set, so `recall@10` understates true recall and the metric mostly measures whether the curated IDs specifically surface. (issue #1 expanded the *number* of CS/ML queries from 8 to 20, but each still has only 4 `relevant_ids` — this per-query sparsity is unchanged.)
 - **Bio/math/physics qrels are dense-search-sourced**, which favors raw-query dense retrieval for those 6 queries in the `hyde` ablation specifically (their `relevant_ids` were selected by running the same query through dense search). The `e2e` and `prefilter` metrics are less affected since they depend on the full fused pipeline, not raw dense search alone — but any HyDE-vs-raw comparison should be read primarily from the CS/ML queries, whose qrels are retrieval-method-independent. As of issue #1, these 6 dense-search-sourced queries are now 6/26 (down from 6/14) of the pooled set, reducing — but not eliminating — their influence on pooled `hyde`-ablation means.
-- **HyDE ablation is underpowered** (n=14) — the Wilcoxon test cannot reliably detect small or query-dependent effects at this sample size.
-- **Claude-as-judge relevance/specificity scores** are a secondary signal and inherit whatever bias the judging model has.
+- **HyDE ablation is underpowered** (n=14 for the existing "Latest results" run; the gold set now has n=26) — the Wilcoxon test cannot reliably detect small or query-dependent effects at this sample size, and bootstrap CIs on small `n` will be wide.
+- **Claude-as-judge relevance/specificity scores** are a secondary signal and inherit whatever bias the judging model has — including for the `--pooled-judgments` NDCG variant below, which is judged by the same model.
+- **The `hyde` eval methodology below has not yet been re-run** against the 26-query set (the "Latest results" / "Canonical-paper boost results" / "RRF k sensitivity" sections above still reflect the prior 14-query, non-stratified, pre-RRF-only `hyde` ablation). A follow-up run with `--evals hyde e2e --rank-delta-top-n 5000 --pooled-judgments` is needed to populate the new tables.
 
 ---
 
-## Proposed HyDE evaluation improvements
+## HyDE evaluation methodology (issue #2)
 
-Tracking checklist in [issue #2](https://github.com/vl-coding/RAGLR-A/issues/2).
+All six items from the issue #2 checklist are implemented in `scripts/evaluate_retrieval.py` / `src/rag_lit/eval_metrics.py` / `src/rag_lit/pipeline.py` and described in "Eval modes & metrics" > `hyde` above:
 
-The current `hyde` ablation compares HyDE-document vs. raw-query dense search using `NDCG@10` against the same 4-id `relevant_ids` qrels used for `e2e`. At n=8 (CS/ML-only) or n=14 (all), with a metric that floors at 0 once the relevant doc falls past rank 10, this produces a single borderline p-value (p=0.0735) that's hard to act on. Some options that would give a clearer signal, roughly ordered by effort:
+1. **Post-RRF (end-to-end) HyDE vs. raw-query ablation** — `pipeline.run(..., hyde_ablation=True)` now also fuses the raw-query dense results with the same BM25/delta/canonical lists (`debug.fused_results_raw_query`), and `evaluate_query` computes `precision/recall/ndcg/mrr@k` for it (`result["hyde_e2e"]`).
+2. **Rank-delta instead of NDCG@10** — `--rank-delta-top-n N` runs an extra `top_n=N` dense search for HyDE-document and raw query and records `rank_raw - rank_hyde` per `relevant_id` (capped at `N+1` when absent), reported as a bootstrap CI on the mean delta.
+3. **TREC-style pooled relevance judgments** — `--pooled-judgments [--pool-size N]` pools the top-N HyDE-fused and raw-fused ids, judges any not already scored, and reports NDCG@k against the pooled graded relevance.
+4. **Stratify by terminology-gap vs. terminology-aligned** — every gold query now has a `stratum` tag (see "Gold query set" above); `report_hyde` prints a separate dense-stage NDCG@k diff + bootstrap CI per stratum.
+5. **Expand the CS/ML-only set** — done in issue #1 (8 → 20 CS/ML queries, 26 total).
+6. **Bootstrap CI alongside Wilcoxon** — `eval_metrics.bootstrap_ci` (1000 resamples, 95% CI by default) is reported alongside every Wilcoxon test in `report_hyde`, for both the dense-stage and post-RRF comparisons, plus the rank-delta and pooled-judgment sections; a closing note reiterates the Claude-as-judge calibration caveat.
 
-1. **Compare post-RRF, not just pre-RRF.** Today's `hyde` ablation only compares the dense-stage ranked lists. Add an e2e variant: run the pipeline twice (HyDE vs. raw query feeding dense, BM25/RRF identical) and compare final fused `precision/recall/ndcg/mrr@10` — this answers whether HyDE changes what the user actually sees, since RRF can amplify or wash out a dense-stage difference.
-
-2. **Switch from NDCG@10 to rank-delta on `relevant_ids`.** Record `rank_raw − rank_hyde` per id with a large `top_n` (e.g. 5000) so most ids get a finite rank. This turns 8 mostly-zero NDCG@10 values into up to 32 paired per-paper observations, giving Wilcoxon far more data and sensitivity to effects like "HyDE moved this paper from rank 800 to 150" that NDCG@10 can't see.
-
-3. **TREC-style pooled relevance judgments.** Pool the HyDE-top-50 and raw-top-50 per query, have Claude score every pooled document, and use those graded scores as the relevance vector for NDCG@k on both rankings — standard practice for comparing rankers without exhaustive qrels, and removes the 4-ids-out-of-3M sparsity problem.
-
-4. **Stratify queries by expected HyDE benefit.** Tag each gold query as "terminology-gap" (colloquial/short, differs from paper phrasing) vs. "terminology-aligned" (already reads like an abstract), and report HyDE-vs-raw per stratum — a clean win in one and no effect in the other is far more actionable than one pooled p=0.07.
-
-5. **Expand the CS/ML-only set.** Growing the 8 retrieval-method-independent CS/ML queries to ~20–24 (still canonical/seminal papers) would meaningfully increase Wilcoxon power without touching the bio/math/physics qrels' dense-search provenance issue.
-
-6. **Bootstrap CI instead of/alongside Wilcoxon.** Resample queries with replacement (e.g. 1000x) and report a 95% CI on the mean NDCG/rank-delta difference — more interpretable than a single p-value at n=8/14, and distinguishes "not significant" from "no detectable effect at this sample size."
+**Not yet done**: an actual re-run of `--evals hyde e2e` (optionally with `--rank-delta-top-n 5000 --pooled-judgments`) against the 26-query set, to populate concrete numbers in this document. This is comparable in cost to the 14-query "Latest results" run (~10.5 min) times ~1.9x for the query count, plus the rank-delta/pooled-judgment overhead noted in "Running evaluation" if those flags are used.

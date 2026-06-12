@@ -73,6 +73,15 @@ class RetrievalDebugInfo(BaseModel):
     bm25_results: List[Dict[str, Any]] = []
     bm25_delta_results: List[Dict[str, Any]] = []
     canonical_results: List[Dict[str, Any]] = []
+    fused_results_raw_query: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description=(
+            "Post-RRF fusion of dense_results_raw_query with the same "
+            "bm25/delta/canonical ranked lists used for the HyDE-document "
+            "fusion. Only populated when hyde_ablation=True, for comparing "
+            "end-to-end HyDE vs. raw-query results (issue #2)."
+        ),
+    )
 
 
 class SearchResponse(BaseModel):

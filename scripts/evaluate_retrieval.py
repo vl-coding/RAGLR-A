@@ -38,10 +38,12 @@ from dotenv import load_dotenv
 
 from src.rag_lit.config import load_config
 from src.rag_lit.eval_metrics import (
+    bootstrap_ci,
     load_gold_queries,
     mrr,
     ndcg_at_k,
     precision_at_k,
+    rank_of,
     recall_at_k,
     set_recall,
 )
@@ -96,7 +98,16 @@ def _fmt(x, digits=3):
 # Per-query evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate_query(pipeline, entry, top_k, hyde_ablation, use_justification):
+def evaluate_query(
+    pipeline,
+    entry,
+    top_k,
+    hyde_ablation,
+    use_justification,
+    rank_delta_top_n=0,
+    pooled_judgments=False,
+    pool_size=10,
+):
     relevant_ids = set(entry["relevant_ids"])
 
     response = pipeline.run(
@@ -111,7 +122,11 @@ def evaluate_query(pipeline, entry, top_k, hyde_ablation, use_justification):
     debug = response.debug
     relevance = {doc_id: 1.0 for doc_id in relevant_ids}
 
-    result = {"query": entry["query"], "relevant_ids": sorted(relevant_ids)}
+    result = {
+        "query": entry["query"],
+        "relevant_ids": sorted(relevant_ids),
+        "stratum": entry.get("stratum"),
+    }
 
     # -- prefilter recall --
     kw_ids = set(debug.keyword_candidate_ids) if debug.keyword_candidate_ids is not None else None
@@ -123,7 +138,7 @@ def evaluate_query(pipeline, entry, top_k, hyde_ablation, use_justification):
         "recall_final_candidates": set_recall(final_ids, relevant_ids),
     }
 
-    # -- HyDE ablation --
+    # -- HyDE ablation: dense-stage (pre-RRF) --
     if hyde_ablation:
         hyde_ids = [r["doc_id"] for r in debug.dense_results]
         raw_ids = [r["doc_id"] for r in debug.dense_results_raw_query]
@@ -136,7 +151,7 @@ def evaluate_query(pipeline, entry, top_k, hyde_ablation, use_justification):
             "raw_mrr": mrr(raw_ids, relevant_ids),
         }
 
-    # -- end-to-end relevance --
+    # -- end-to-end relevance (HyDE-document fusion, the default pipeline) --
     retrieved_ids = [r.arxiv_id for r in response.results]
     result["e2e"] = {
         "precision@k": precision_at_k(retrieved_ids, relevant_ids, top_k),
@@ -147,7 +162,48 @@ def evaluate_query(pipeline, entry, top_k, hyde_ablation, use_justification):
         "retrieved_ids": retrieved_ids,
     }
 
-    # -- justifier records (consumed by calibration) --
+    # -- HyDE ablation: post-RRF end-to-end (issue #2 item 1) --
+    if hyde_ablation:
+        raw_fused_ids = [item["doc_id"] for item in debug.fused_results_raw_query][:top_k]
+        result["hyde_e2e"] = {
+            "raw_precision@k": precision_at_k(raw_fused_ids, relevant_ids, top_k),
+            "raw_recall@k": recall_at_k(raw_fused_ids, relevant_ids, top_k),
+            "raw_ndcg@k": ndcg_at_k(raw_fused_ids, relevance, top_k),
+            "raw_mrr": mrr(raw_fused_ids, relevant_ids),
+            "raw_hits": [aid for aid in raw_fused_ids if aid in relevant_ids],
+            "raw_retrieved_ids": raw_fused_ids,
+        }
+
+    # -- HyDE ablation: rank-delta on relevant_ids at a large top_n (issue #2 item 2) --
+    if hyde_ablation and rank_delta_top_n:
+        hyde_large = pipeline.dense.search(
+            query_text=response.trace.hyde_document,
+            candidate_ids=final_ids,
+            top_n=rank_delta_top_n,
+        )
+        raw_large = pipeline.dense.search(
+            query_text=entry["query"],
+            candidate_ids=final_ids,
+            top_n=rank_delta_top_n,
+        )
+        hyde_large_ids = [r["doc_id"] for r in hyde_large]
+        raw_large_ids = [r["doc_id"] for r in raw_large]
+
+        per_id = []
+        for rid in sorted(relevant_ids):
+            r_hyde = rank_of(rid, hyde_large_ids)
+            r_raw = rank_of(rid, raw_large_ids)
+            capped_hyde = r_hyde if r_hyde is not None else rank_delta_top_n + 1
+            capped_raw = r_raw if r_raw is not None else rank_delta_top_n + 1
+            per_id.append({
+                "arxiv_id": rid,
+                "rank_hyde": r_hyde,
+                "rank_raw": r_raw,
+                "delta": capped_raw - capped_hyde,
+            })
+        result["rank_delta"] = {"top_n": rank_delta_top_n, "per_id": per_id}
+
+    # -- justifier records (consumed by calibration and pooled judgments) --
     if use_justification:
         result["justifier_records"] = [
             {
@@ -158,6 +214,40 @@ def evaluate_query(pipeline, entry, top_k, hyde_ablation, use_justification):
             }
             for r in response.results
         ]
+
+    # -- TREC-style pooled relevance judgments (issue #2 item 3) --
+    if hyde_ablation and pooled_judgments:
+        raw_fused_ids = result["hyde_e2e"]["raw_retrieved_ids"]
+        hyde_pool = retrieved_ids[:pool_size]
+        raw_pool = raw_fused_ids[:pool_size]
+        pool_ids = sorted(set(hyde_pool) | set(raw_pool))
+
+        known_scores = {
+            rec["arxiv_id"]: rec["relevance_score"]
+            for rec in result.get("justifier_records", [])
+            if rec["relevance_score"] is not None
+        }
+
+        pooled_relevance = {}
+        for doc_id in pool_ids:
+            if doc_id in known_scores:
+                pooled_relevance[doc_id] = known_scores[doc_id]
+                continue
+            paper = pipeline._load_paper(doc_id)
+            judged = pipeline.justifier.justify(
+                query=entry["query"], title=paper.title, abstract=paper.abstract
+            )
+            score = judged.get("relevance_score")
+            if score is not None:
+                pooled_relevance[doc_id] = score
+
+        result["pooled_judgment"] = {
+            "pool_size": pool_size,
+            "pool_ids": pool_ids,
+            "relevance": pooled_relevance,
+            "hyde_ndcg_pooled@k": ndcg_at_k(hyde_pool, pooled_relevance, top_k),
+            "raw_ndcg_pooled@k": ndcg_at_k(raw_pool, pooled_relevance, top_k),
+        }
 
     return result
 
@@ -244,8 +334,29 @@ def report_prefilter(per_query_results):
     print(f"\nmean recall_final_candidates={mean_final:.3f}")
 
 
-def report_hyde(per_query_results):
-    print("\n=== HyDE ablation (HyDE-document dense search vs. raw-query dense search) ===")
+def _wilcoxon_or_skip(a, b, label):
+    if wilcoxon is not None and any(x != y for x, y in zip(a, b)):
+        try:
+            stat, p_value = wilcoxon(a, b)
+            print(f"Wilcoxon signed-rank test ({label}): statistic={stat:.3f} p={p_value:.4f}")
+        except ValueError as e:
+            print(f"Wilcoxon test ({label}) skipped: {e}")
+    else:
+        print(f"Wilcoxon test ({label}) skipped (scipy unavailable or all differences are zero).")
+
+
+def _diff_ci(hyde_values, raw_values, label):
+    diffs = [h - r for h, r in zip(hyde_values, raw_values)]
+    ci = bootstrap_ci(diffs)
+    print(
+        f"{label}: mean(hyde)={statistics.mean(hyde_values):.3f} "
+        f"mean(raw)={statistics.mean(raw_values):.3f} "
+        f"mean diff(hyde-raw)={ci['mean']:.3f} 95% CI=[{ci['low']:.3f}, {ci['high']:.3f}]"
+    )
+
+
+def report_hyde(per_query_results, top_k, rank_delta_top_n=0, pooled_judgments=False):
+    print("\n=== HyDE ablation: dense-stage (pre-RRF) ===")
     rows = []
     hyde_ndcgs, raw_ndcgs = [], []
     wins = ties = losses = 0
@@ -270,16 +381,100 @@ def report_hyde(per_query_results):
         rows,
     )
     print(f"\nHyDE vs raw-query NDCG@k: wins={wins} ties={ties} losses={losses}")
-    print(f"mean hyde_ndcg={statistics.mean(hyde_ndcgs):.3f}  mean raw_ndcg={statistics.mean(raw_ndcgs):.3f}")
+    _diff_ci(hyde_ndcgs, raw_ndcgs, "dense-stage NDCG@k")
+    _wilcoxon_or_skip(hyde_ndcgs, raw_ndcgs, "dense-stage NDCG@k")
 
-    if wilcoxon is not None and any(h != r for h, r in zip(hyde_ndcgs, raw_ndcgs)):
-        try:
-            stat, p_value = wilcoxon(hyde_ndcgs, raw_ndcgs)
-            print(f"Wilcoxon signed-rank test: statistic={stat:.3f} p={p_value:.4f}")
-        except ValueError as e:
-            print(f"Wilcoxon test skipped: {e}")
-    else:
-        print("Wilcoxon test skipped (scipy unavailable or all differences are zero).")
+    # -- post-RRF end-to-end comparison (issue #2 item 1) --
+    if all("hyde_e2e" in r for r in per_query_results):
+        print(f"\n=== HyDE ablation: post-RRF end-to-end (top-{top_k}) ===")
+        rows = []
+        hyde_p, raw_p = [], []
+        hyde_r, raw_r = [], []
+        hyde_n, raw_n = [], []
+        hyde_m, raw_m = [], []
+        for r in per_query_results:
+            e, he = r["e2e"], r["hyde_e2e"]
+            rows.append([
+                r["query"][:45],
+                _fmt(e["precision@k"]), _fmt(he["raw_precision@k"]),
+                _fmt(e["recall@k"]), _fmt(he["raw_recall@k"]),
+                _fmt(e["ndcg@k"]), _fmt(he["raw_ndcg@k"]),
+                _fmt(e["mrr"]), _fmt(he["raw_mrr"]),
+            ])
+            hyde_p.append(e["precision@k"]); raw_p.append(he["raw_precision@k"])
+            hyde_r.append(e["recall@k"]); raw_r.append(he["raw_recall@k"])
+            hyde_n.append(e["ndcg@k"]); raw_n.append(he["raw_ndcg@k"])
+            hyde_m.append(e["mrr"]); raw_m.append(he["raw_mrr"])
+        _print_table(
+            ["query", "hyde_P", "raw_P", "hyde_R", "raw_R", "hyde_NDCG", "raw_NDCG", "hyde_MRR", "raw_MRR"],
+            rows,
+        )
+        print()
+        _diff_ci(hyde_p, raw_p, f"post-RRF P@{top_k}")
+        _diff_ci(hyde_r, raw_r, f"post-RRF R@{top_k}")
+        _diff_ci(hyde_n, raw_n, f"post-RRF NDCG@{top_k}")
+        _diff_ci(hyde_m, raw_m, "post-RRF MRR")
+        _wilcoxon_or_skip(hyde_n, raw_n, f"post-RRF NDCG@{top_k}")
+
+    # -- rank-delta on relevant_ids at a large top_n (issue #2 item 2) --
+    if rank_delta_top_n and all("rank_delta" in r for r in per_query_results):
+        print(f"\n=== HyDE ablation: rank-delta @ top_n={rank_delta_top_n} ===")
+        all_deltas = []
+        finite_deltas = []
+        for r in per_query_results:
+            for item in r["rank_delta"]["per_id"]:
+                all_deltas.append(item["delta"])
+                if item["rank_hyde"] is not None or item["rank_raw"] is not None:
+                    finite_deltas.append(item["delta"])
+        ci = bootstrap_ci(all_deltas)
+        print(
+            f"n={len(all_deltas)} relevant_ids (rank_raw - rank_hyde, capped at "
+            f"top_n+1 for ids absent from top {rank_delta_top_n}):"
+        )
+        print(f"  mean delta={ci['mean']:.1f}  95% CI=[{ci['low']:.1f}, {ci['high']:.1f}]")
+        print("  (positive delta = HyDE ranks the relevant paper higher / better than raw query)")
+        if finite_deltas:
+            ci2 = bootstrap_ci(finite_deltas)
+            print(
+                f"  excluding ids absent from both lists (n={len(finite_deltas)}): "
+                f"mean delta={ci2['mean']:.1f}  95% CI=[{ci2['low']:.1f}, {ci2['high']:.1f}]"
+            )
+
+    # -- stratified by terminology gap/alignment (issue #2 item 4) --
+    print("\n=== HyDE ablation: stratified by query terminology (dense-stage NDCG@k) ===")
+    for stratum in ("terminology_gap", "terminology_aligned"):
+        subset = [r for r in per_query_results if r.get("stratum") == stratum]
+        if not subset:
+            continue
+        hyde_vals = [r["hyde"]["hyde_ndcg@k"] for r in subset]
+        raw_vals = [r["hyde"]["raw_ndcg@k"] for r in subset]
+        _diff_ci(hyde_vals, raw_vals, f"{stratum} (n={len(subset)})")
+
+    # -- TREC-style pooled relevance judgments (issue #2 item 3) --
+    if pooled_judgments and all("pooled_judgment" in r for r in per_query_results):
+        print(f"\n=== HyDE ablation: TREC-style pooled-judgment NDCG@{top_k} ===")
+        rows = []
+        hyde_vals, raw_vals = [], []
+        for r in per_query_results:
+            pj = r["pooled_judgment"]
+            rows.append([
+                r["query"][:45],
+                pj["pool_size"],
+                len(pj["pool_ids"]),
+                _fmt(pj["hyde_ndcg_pooled@k"]),
+                _fmt(pj["raw_ndcg_pooled@k"]),
+            ])
+            hyde_vals.append(pj["hyde_ndcg_pooled@k"])
+            raw_vals.append(pj["raw_ndcg_pooled@k"])
+        _print_table(["query", "pool_size", "pool_n", "hyde_ndcg", "raw_ndcg"], rows)
+        print()
+        _diff_ci(hyde_vals, raw_vals, "pooled-judgment NDCG@k")
+        _wilcoxon_or_skip(hyde_vals, raw_vals, "pooled-judgment NDCG@k")
+
+    print(
+        "\nNote: Claude-as-judge relevance/specificity scores (used above for pooled "
+        "judgments) are not calibrated across queries -- see docs/LIMITATIONS.md."
+    )
 
 
 def report_e2e(per_query_results, top_k):
@@ -333,6 +528,23 @@ def main():
     parser.add_argument("--decoys", type=int, default=3, help="number of random decoy papers per query for calibration")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="outputs/eval_report.json")
+    parser.add_argument(
+        "--rank-delta-top-n", type=int, default=0,
+        help="if >0 and --evals includes 'hyde', also run an extra large-top_n dense "
+             "search (HyDE-document and raw-query) and record rank_raw - rank_hyde for "
+             "each relevant_id (issue #2 item 2). 0 disables (default).",
+    )
+    parser.add_argument(
+        "--pooled-judgments", action="store_true",
+        help="if set and --evals includes 'hyde', additionally pool the top "
+             "--pool-size HyDE-fused and raw-fused results per query, judge any "
+             "un-judged pool members with Claude, and compute NDCG@k against the "
+             "pooled graded relevance (issue #2 item 3). Adds Claude API calls.",
+    )
+    parser.add_argument(
+        "--pool-size", type=int, default=10,
+        help="pool size per ranking for --pooled-judgments (default 10)",
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -361,7 +573,10 @@ def main():
             entry,
             top_k=args.top_k,
             hyde_ablation=needs_hyde_ablation,
-            use_justification=needs_justification,
+            use_justification=needs_justification or args.pooled_judgments,
+            rank_delta_top_n=args.rank_delta_top_n if needs_hyde_ablation else 0,
+            pooled_judgments=needs_hyde_ablation and args.pooled_judgments,
+            pool_size=args.pool_size,
         )
         per_query_results.append(result)
 
@@ -370,7 +585,12 @@ def main():
     if "prefilter" in evals:
         report_prefilter(per_query_results)
     if "hyde" in evals:
-        report_hyde(per_query_results)
+        report_hyde(
+            per_query_results,
+            args.top_k,
+            rank_delta_top_n=args.rank_delta_top_n,
+            pooled_judgments=args.pooled_judgments,
+        )
     if "e2e" in evals:
         report_e2e(per_query_results, args.top_k)
     if "calibration" in evals:
