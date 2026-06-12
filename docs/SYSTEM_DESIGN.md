@@ -13,7 +13,7 @@ User query
     │
     ▼
 ┌─────────────────────────────┐
-│  1. Qwen keyword prefilter   │  Qwen2.5-3B-Instruct extracts ≤18 keywords
+│  1. Qwen keyword prefilter   │  Qwen2.5-0.5B-Instruct extracts ≤18 keywords
 │                             │  → intersected with inverted index
 │                             │  → reduces candidate set
 └─────────────────────────────┘
@@ -32,7 +32,7 @@ User query
     ▼                                              ▼
 ┌─────────────────────┐              ┌─────────────────────────┐
 │  3. Dense retrieval  │              │  4. BM25 retrieval       │
-│  SBERT embeddings   │              │  rank-bm25 over          │
+│  SBERT embeddings   │              │  bm25s over              │
 │  + ChromaDB         │              │  tokenized abstracts     │
 │  top-200 candidates │              │  top-200 candidates      │
 └─────────────────────┘              └─────────────────────────┘
@@ -64,9 +64,9 @@ User query
 
 ### 1. Qwen keyword prefilter (`qwen_prefilter.py`, `keyword_index.py`)
 
-`QwenKeywordExtractor` loads `Qwen/Qwen2.5-3B-Instruct` locally and prompts it to return a JSON list of ≤18 academic keywords for the query. Each keyword is tokenized and looked up in a prebuilt inverted index (`keyword_inverted_index.pkl`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
+`QwenKeywordExtractor` loads `Qwen/Qwen2.5-0.5B-Instruct` locally and prompts it to return a JSON list of ≤18 academic keywords for the query. Each keyword is tokenized and looked up in a prebuilt inverted index stored in SQLite (`keyword_index.sqlite3`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
 
-The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs. It is built at index time from paper titles and abstracts.
+The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs, stored as a `token -> comma-separated arxiv_ids` table. It is built at index time from paper titles and abstracts (`build_keyword_inverted_index` / `save_keyword_index_db` in `keyword_index.py`).
 
 ### 2. Claude HyDE (`hyde.py`)
 
@@ -78,7 +78,7 @@ Hypothetical Document Embeddings: Claude Sonnet is prompted to write a 3–5 sen
 
 ### 4. BM25 retrieval (`bm25_retriever.py`)
 
-`BM25Okapi` from `rank-bm25` is built over tokenized paper texts (title + abstract). At query time, BM25 scores are computed for all papers, then filtered to the candidate set and the top `bm25_candidates` (default 200) are returned.
+A `bm25s.BM25` index is built over tokenized paper texts (title + abstract). At query time, BM25 scores are computed for all papers, then filtered to the candidate set and the top `bm25_candidates` (default 200) are returned.
 
 ### 5. Reciprocal Rank Fusion (`rrf.py`)
 
@@ -167,7 +167,7 @@ retrieval:
 
 models:
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
-  qwen_model: Qwen/Qwen2.5-3B-Instruct
+  qwen_model: Qwen/Qwen2.5-0.5B-Instruct
   claude_model: claude-sonnet-4-6
 ```
 
@@ -192,8 +192,8 @@ update_arxiv_data.py  →  arxiv_papers.jsonl
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
-       dense_index/    bm25_index.pkl   keyword_inverted_index.pkl
-      (ChromaDB)       (BM25Okapi)       (token → {arxiv_id})
+       dense_index/      bm25_index/    keyword_index.sqlite3
+      (ChromaDB)         (bm25s)        (token → {arxiv_id})
 ```
 
-`scripts/build_indexes.py` orchestrates all three and writes `artifacts/manifest.json`.
+`scripts/orchestrate_indexing.py` runs `build_dense_index_fast.py`, `build_bm25_index.py`, `build_keyword_index.py`, and `build_metadata_db.py` end-to-end and writes `artifacts/manifest.json`.
