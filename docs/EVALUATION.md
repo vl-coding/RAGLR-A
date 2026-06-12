@@ -46,9 +46,8 @@ python scripts/evaluate_retrieval.py --evals prefilter hyde e2e calibration --to
 `--evals` accepts any combination of `prefilter`, `hyde`, `e2e`, `calibration` (default: all four). Each gold query is run through the real pipeline **once** (`debug=True`, with `hyde_ablation` / `use_claude_justification` enabled as needed) and all requested analyses are derived from that single response — no redundant Qwen/HyDE/Claude calls.
 
 Cost/latency notes:
-- `prefilter` alone is cheapest (~5 min/query: Qwen keyword extraction + HyDE + one dense search + BM25 over up to ~3M candidates).
 - Adding `hyde` doubles the dense search (HyDE-document query vs. raw-query). Adding `e2e`/`calibration` adds one Claude justification call per top-k result (10 per query at `--top-k 10`, plus `--decoys` per query for `calibration`).
-- With `hyde` + `e2e` on the full 14-query set: ~12–15 min/query, ~3 hours total.
+- With all four evals (`prefilter hyde e2e calibration`) on the full 14-query set: **~45 sec/query, ~10.5 minutes total** (measured for the run behind the "Latest results" section below).
 
 ---
 

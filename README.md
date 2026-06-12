@@ -57,7 +57,8 @@ RAGLR-A/
 ├── data/
 │   ├── raw/                Raw OAI-PMH snapshot (gitignored)
 │   └── processed/          Cleaned paper JSONL (gitignored)
-├── evaluation/             Eval queries and runner
+├── docs/
+│   └── EVALUATION.md       Retrieval evaluation methodology and results
 ├── prompts/                Versioned prompt templates
 ├── scripts/
 │   ├── update_arxiv_data.py     Harvest arXiv via OAI-PMH
@@ -84,6 +85,7 @@ RAGLR-A/
 │   ├── justifier.py        Claude relevance justifier
 │   └── rate_limiter.py     Demo rate limiting
 └── tests/                  Unit and smoke tests
+    └── eval/               Gold query set for retrieval evaluation
 ```
 
 ---
@@ -192,6 +194,20 @@ pytest tests/test_pipeline_smoke.py -v
 | Dense embeddings | sentence-transformers/all-MiniLM-L6-v2 (local) |
 | HyDE query expansion | claude-sonnet-4-6 (API) |
 | Relevance justification | claude-sonnet-4-6 (API) |
+
+---
+
+## Evaluation
+
+RAGLR-A is evaluated against a 14-query gold set (8 CS/ML + 2 biology + 2 math + 2 physics) with hand-curated known-relevant `arxiv_id`s, run through the real pipeline at `top_k=10`. Highlights from the latest run:
+
+| Metric | Result |
+|---|---|
+| Prefilter recall (keyword filter never drops a known-relevant paper) | 1.000 |
+| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.086 / 0.214 / 0.197 / 0.345 |
+| Justifier decoy-discrimination gap (top-k vs. random papers) | 8.07 / 10 |
+
+See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the gold query set, HyDE-vs-raw-query ablation results, and per-query breakdowns.
 
 ---
 
