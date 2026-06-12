@@ -104,7 +104,47 @@ Per-query hits against `relevant_ids`:
 
 - **CS/ML queries (1–8)**: 4 of 8 now get at least one hit in the top-10 — vision transformers (ViT, 2010.11929), contrastive learning (SimCLR, 2002.05709), denoising diffusion (DDPM + DDIM, 2/4), and graph neural networks (GAT, 1710.10903). The other 4 (transformer architectures, pretrained language models, parameter-efficient fine-tuning, CLIP) still get 0 hits. This is a major improvement from the pre-fix run, where **all 8** CS/ML queries scored 0 — the BM25 fix recovers some, but not all, of the canonical papers into the top-10.
 
-  Diagnosing the remaining 4: across all 16 `relevant_ids` for these queries, **none appear in BM25's top-200 candidates** (`bm25_candidates: 200`) — the canonical papers' lexical content just doesn't compete with thousands of more recent, more specifically-worded papers on the same topics in a 3M-paper corpus. Dense retrieval fares slightly better (e.g. CLIP's own paper, 2103.00020, ranks #9 in HyDE-document dense search), but a paper that's strong in only *one* of the two retrievers is penalized by RRF: dense-rank-9-only gives `1/(60+9) = 0.0145`, below the top-10 RRF cutoff (~0.018–0.021), while papers ranking moderately in *both* lists (e.g. dense #30 + BM25 #30 → `1/90 + 1/90 = 0.0222`) win out. This is an inherent property of RRF + a large modern corpus rather than a bug: it rewards cross-retriever consensus, and old/terse foundational papers often lose that consensus to newer papers that are both more lexically and semantically aligned with how the topic is phrased today.
+  **Diagnosing the remaining 4** (queries 1–3 and 8 — transformer architectures, pretrained LMs, parameter-efficient fine-tuning, CLIP-style pretraining; tracked in [issue #3](https://github.com/vl-coding/RAGLR-A/issues/3)). First, ruled out an indexing bug: all 16 `relevant_ids` for these 4 queries are present in both the dense index (3,067,125/3,067,125 docs) and the BM25 index (2,000,000 docs) — confirmed 16/16 hits in each. The gap is purely a *ranking* problem, not a coverage problem.
+
+  Per-query retrieval debug (rrf_k=60, dense_candidates=bm25_candidates=200) shows **every one of the 16 `relevant_ids` scores below the rank-10 RRF cutoff**, and 11/16 don't appear in either retriever's top-200 at all:
+
+  | arxiv_id | paper | dense (HyDE) rank | dense (raw) rank | bm25 rank | rrf_score | rank-10 cutoff |
+  |---|---|---|---|---|---|---|
+  | 1706.03762 | Attention Is All You Need | — | — | — | 0.0000 | 0.0203 |
+  | 1901.02860 | Transformer-XL | — | 199 | — | 0.0000 | 0.0203 |
+  | 1910.10683 | T5 | — | — | — | 0.0000 | 0.0203 |
+  | 2005.14165 | GPT-3 | — | — | — | 0.0000 | 0.0203 |
+  | 1810.04805 | BERT | 43 | — | — | 0.0097 | 0.0159 |
+  | 1907.11692 | RoBERTa | — | — | — | 0.0000 | 0.0159 |
+  | 1909.11942 | ALBERT | — | — | — | 0.0000 | 0.0159 |
+  | 2003.10555 | ELECTRA | — | — | — | 0.0000 | 0.0159 |
+  | 2106.09685 | LoRA | — | — | — | 0.0000 | 0.0190 |
+  | 1902.00751 | Adapters | — | — | — | 0.0000 | 0.0190 |
+  | 2101.00190 | Prefix-Tuning | — | — | — | 0.0000 | 0.0190 |
+  | 2110.07602 | P-Tuning v2 | 129 | 182 | — | 0.0053 | 0.0190 |
+  | 2103.00020 | CLIP | 7 | — | — | 0.0149 | 0.0206 |
+  | 2102.05918 | ALIGN | 103 | — | — | 0.0061 | 0.0206 |
+  | 2201.12086 | BLIP | — | — | — | 0.0000 | 0.0206 |
+  | 2205.01917 | CoCa | — | — | — | 0.0000 | 0.0206 |
+
+  Even CLIP's own paper (2103.00020, dense rank 7, RRF score 0.0149) misses the rank-10 cutoff (0.0206) because it only registers in *one* retriever — RRF rewards cross-retriever consensus, so a paper that's strong in dense alone (or BM25 alone) is usually outscored by mediocre-in-both papers (e.g. dense #30 + BM25 #30 → `1/90 + 1/90 = 0.0222`).
+
+  To find out *how far* the misses are, an unfiltered raw-query BM25 and dense search **with no candidate filter and `top_n=5000`** (vs. the pipeline's `top_n=200`) was run. Results: ranks range from 182 (best case, P-Tuning v2 dense) to >5000 (9/16 don't appear even in the top 5000 of a 3M-doc corpus) — e.g. Attention Is All You Need ranks BM25 #4579 / dense #2028, and GPT-3 doesn't appear in either top-5000. **This is an inherent retrieval-difficulty property, not a bug**: short, decade-old foundational papers ("we propose the Transformer, a novel architecture...") use far less of today's terminology than the thousands of newer papers that now describe the same ideas using the query's vocabulary, so they lose on both lexical (BM25) and semantic (dense) similarity to modern phrasing. Increasing `dense_candidates`/`bm25_candidates` from 200 to 5000 would barely help — even the best-ranked misses (rank 182–199) would still score `1/(60+182) ≈ 0.0041`, an order of magnitude below the rank-10 cutoff.
+
+### RRF k sensitivity
+
+The same cached dense/BM25 ranked lists (one real pipeline run per query, `dense_candidates=bm25_candidates=200`) were re-fused at `rrf_k ∈ {10, 20, 30, 40, 60, 80, 100, 150, 200}` — a pure re-fusion sweep that doesn't touch `configs/config.yaml` or re-run retrieval, since `rrf_k` only affects the fusion step (see [issue #3](https://github.com/vl-coding/RAGLR-A/issues/3)):
+
+| rrf_k | P@10 (all) | R@10 (all) | NDCG@10 (all) | MRR (all) | P@10 (CS/ML) | R@10 (CS/ML) | NDCG@10 (CS/ML) | MRR (CS/ML) | 0-hit recovered |
+|---|---|---|---|---|---|---|---|---|---|
+| 10 | 0.086 | 0.214 | 0.199 | 0.332 | 0.050 | 0.125 | 0.127 | 0.250 | 0/4 |
+| 20 | 0.093 | 0.232 | 0.204 | 0.332 | 0.050 | 0.125 | 0.129 | 0.250 | 0/4 |
+| 30 | 0.079 | 0.196 | 0.185 | 0.309 | 0.050 | 0.125 | 0.119 | 0.212 | 0/4 |
+| **60 (current)** | 0.079 | 0.196 | 0.186 | 0.307 | 0.050 | 0.125 | 0.118 | 0.208 | 0/4 |
+| 100 | 0.079 | 0.196 | 0.179 | 0.295 | 0.050 | 0.125 | 0.118 | 0.208 | 0/4 |
+| 200 | 0.071 | 0.179 | 0.170 | 0.286 | 0.050 | 0.125 | 0.118 | 0.208 | 0/4 |
+
+`rrf_k=20` is marginally best on the *all-queries* mean, but that improvement comes entirely from the bio/math/physics queries (whose `relevant_ids` already rank #1 in raw-query dense search, so a smaller `k` just lets that #1 dominate the fused score more). The CS/ML-only columns are flat across the whole sweep, and **0/4 zero-hit queries are recovered at any `rrf_k`** — consistent with the diagnosis above: the bottleneck is upstream of fusion (none of the 16 `relevant_ids` are in the dense/BM25 candidate lists RRF fuses), so no `rrf_k` value can fix it. The current `rrf_k=60` is not a meaningfully worse choice than the alternatives tested; switching to 20 would be a marginal, bio/math/physics-driven gain at n=14 and isn't recommended without re-validating on a larger query set.
 - **Biology/math/physics queries (9–14)**: all 6 get at least one hit (recall@10 0.25–0.75), e.g. protein structure prediction hits 3/4 relevant_ids (recall=0.75).
 
 Overall precision/recall/NDCG dropped slightly versus the pre-fix run (0.121→0.086 P@10, 0.304→0.214 R@10) while MRR rose (0.205→0.345). This is expected: the bio/math/physics qrels are no longer hand-picked to match BM25's output, so they're harder to hit exactly, while several CS/ML canonical papers are now retrievable at all (raising MRR by giving more queries a non-zero top hit) even if not always landing in the top-10.
@@ -135,7 +175,29 @@ Run each ablation and compare result overlap and ranking against the default pip
 
 ## Known evaluation gaps
 
+Tracked in [issue #1](https://github.com/vl-coding/RAGLR-A/issues/1) (qrels) and [issue #2](https://github.com/vl-coding/RAGLR-A/issues/2) (HyDE ablation methodology).
+
 - **Small qrels per query.** Each query has only 4 `relevant_ids`, which is a *lower bound* on relevance — there are almost certainly other relevant papers in a 3M-paper corpus that aren't in the gold set, so `recall@10` understates true recall and the metric mostly measures whether the curated IDs specifically surface.
 - **Bio/math/physics qrels are dense-search-sourced**, which favors raw-query dense retrieval for those 6 queries in the `hyde` ablation specifically (their `relevant_ids` were selected by running the same query through dense search). The `e2e` and `prefilter` metrics are less affected since they depend on the full fused pipeline, not raw dense search alone — but any HyDE-vs-raw comparison should be read primarily from the 8 CS/ML queries, whose qrels are retrieval-method-independent.
 - **HyDE ablation is underpowered** (n=14) — the Wilcoxon test cannot reliably detect small or query-dependent effects at this sample size.
 - **Claude-as-judge relevance/specificity scores** are a secondary signal and inherit whatever bias the judging model has.
+
+---
+
+## Proposed HyDE evaluation improvements
+
+Tracking checklist in [issue #2](https://github.com/vl-coding/RAGLR-A/issues/2).
+
+The current `hyde` ablation compares HyDE-document vs. raw-query dense search using `NDCG@10` against the same 4-id `relevant_ids` qrels used for `e2e`. At n=8 (CS/ML-only) or n=14 (all), with a metric that floors at 0 once the relevant doc falls past rank 10, this produces a single borderline p-value (p=0.0735) that's hard to act on. Some options that would give a clearer signal, roughly ordered by effort:
+
+1. **Compare post-RRF, not just pre-RRF.** Today's `hyde` ablation only compares the two *dense-stage* ranked lists. Add an end-to-end variant: run the full pipeline twice — once with the HyDE document feeding dense (current default) and once with the raw query feeding dense — keeping BM25 and RRF identical, and compare the *final fused* `precision/recall/ndcg/mrr@10`. This answers the question that actually matters ("does HyDE change what the user sees?"), since RRF fusion can amplify or wash out a dense-stage difference.
+
+2. **Switch from NDCG@10 to rank-delta on `relevant_ids`.** For each `relevant_id`, record `rank_raw − rank_hyde` (using a large `top_n`, e.g. 5000, so most ids get a finite rank instead of "not found"). This turns 8 query-level NDCG@10 values (mostly 0) into up to 32 paired per-paper observations (8 CS/ML queries × 4 ids), giving the Wilcoxon/sign test far more data points and sensitivity to "HyDE moved this paper from rank 800 to rank 150" — a real effect that NDCG@10 can't see.
+
+3. **TREC-style pooled relevance judgments.** Take the union of the HyDE-top-50 and raw-top-50 dense results per query, have Claude's justifier score every *pooled* document (not just the final top-10), and use those graded scores as the relevance vector for NDCG@k on both rankings. This removes the "only 4 known-relevant ids out of 3M" sparsity problem and judges both methods against a shared, larger relevance set — standard practice for comparing rankers without exhaustive qrels.
+
+4. **Stratify queries by expected HyDE benefit.** HyDE's hypothesized advantage is bridging a vocabulary gap between how a user phrases a question and how papers describe themselves. Tag each gold query as "terminology-gap" (user phrasing differs from paper phrasing — e.g. colloquial/short queries) vs. "terminology-aligned" (query already reads like an abstract), and report HyDE-vs-raw separately per stratum. A clean win in one stratum and a clean loss/no-effect in the other is a far more actionable finding than one pooled p=0.07.
+
+5. **Expand the CS/ML-only set.** The 8 CS/ML queries are the only retrieval-method-independent qrels; growing this from 8 to ~20–24 queries (still canonical/seminal papers, chosen independent of any retrieval method) would meaningfully increase Wilcoxon power without touching the bio/math/physics qrels' dense-search provenance issue.
+
+6. **Bootstrap CI instead of/alongside Wilcoxon.** Resample queries with replacement (e.g. 1000x) and report a 95% CI on the mean NDCG (or rank-delta) difference — more interpretable than a single p-value at n=8/14, and makes "not significant" vs. "no detectable effect at this sample size" explicit.
