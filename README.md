@@ -43,6 +43,49 @@ Every response also includes a `RetrievalTrace`: search-space reduction stats, l
 - OAI-PMH harvester (`scripts/update_arxiv_data.py`) with incremental update support and recovery
 - JSONL preprocessing and multi-index build (dense, BM25, keyword, metadata)
 
+### Models used
+
+| Role | Model |
+|---|---|
+| Keyword extraction | Qwen/Qwen2.5-0.5B-Instruct (local) |
+| Dense embeddings | sentence-transformers/all-MiniLM-L6-v2 (local) |
+| HyDE query expansion | claude-sonnet-4-6 (API) |
+| Relevance justification | claude-sonnet-4-6 (API) |
+
+---
+
+## Corpus coverage
+
+The harvested corpus spans the full arXiv taxonomy: Computer Science · Mathematics · Physics · Astrophysics · Condensed Matter · High Energy Physics · Nuclear Physics · Nonlinear Sciences · Statistics · Quantitative Biology · Quantitative Finance · Economics · Electrical Engineering and Systems Science · Other Physics
+
+---
+
+## Evaluation
+
+RAGLR-A is evaluated against a 14-query gold set (8 CS/ML + 2 biology + 2 math + 2 physics) with hand-curated known-relevant `arxiv_id`s, run through the real pipeline at `top_k=10`. Highlights from the latest run:
+
+| Metric | Result |
+|---|---|
+| Prefilter recall (keyword filter never drops a known-relevant paper) | 1.000 |
+| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.086 / 0.214 / 0.197 / 0.345 |
+| Justifier decoy-discrimination gap (top-k vs. random papers) | 8.07 / 10 |
+
+See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the gold query set, HyDE-vs-raw-query ablation results, and per-query breakdowns.
+
+---
+
+## Limitations
+
+- **Old foundational papers rank poorly** — decade-old vocabulary doesn't compete with modern phrasing on lexical (BM25) or semantic (dense) similarity
+- **Small gold query set** (14 queries, 4 `relevant_ids` each) — metrics are a noisy lower bound on true recall
+- **Lightweight embedding model** (`all-MiniLM-L6-v2`) may underperform on notation-heavy math/physics queries
+- **BM25 tokenization** struggles with model names/acronyms (e.g. `GPT-4`, `BERT`) and math symbols
+- **No citation graph or co-authorship modeling** — ranking is purely lexical + semantic similarity
+- **Claude justification scores** aren't calibrated across queries; use for within-query ranking only
+- **English-only** corpus and embedding model
+
+See **[docs/LIMITATIONS.md](docs/LIMITATIONS.md)** for the full discussion.
+
 ---
 
 ## Project structure
@@ -145,7 +188,7 @@ Enter a research question and click **Find Papers**.
 
 > **Performance note:** with the full 3M-paper corpus on CPU, expect roughly **1 minute per query** (local Qwen keyword extraction + Claude HyDE + dual retrieval + per-result justification). A smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds, since most of the latency comes from running the local Qwen model and per-result Claude calls over a large candidate set.
 
-### FastAPI server
+#### FastAPI server
 
 ```bash
 uvicorn api.main:app --reload
@@ -163,7 +206,7 @@ Interactive docs at `http://localhost:8000/docs`.
 }
 ```
 
-### CLI
+#### CLI
 
 ```bash
 python scripts/run_query.py \
@@ -173,9 +216,7 @@ python scripts/run_query.py \
 
 Add `--no-qwen` to skip keyword prefiltering, `--no-justification` to skip Claude scoring.
 
----
-
-## Running tests
+### 6. Run tests
 
 ```bash
 # Unit tests — no data or API keys required
@@ -184,34 +225,3 @@ pytest tests/test_schemas.py tests/test_rrf.py tests/test_filters.py -v
 # Pipeline smoke tests — uses mocks, no data or API keys required
 pytest tests/test_pipeline_smoke.py -v
 ```
-
----
-
-## Models used
-
-| Role | Model |
-|---|---|
-| Keyword extraction | Qwen/Qwen2.5-0.5B-Instruct (local) |
-| Dense embeddings | sentence-transformers/all-MiniLM-L6-v2 (local) |
-| HyDE query expansion | claude-sonnet-4-6 (API) |
-| Relevance justification | claude-sonnet-4-6 (API) |
-
----
-
-## Evaluation
-
-RAGLR-A is evaluated against a 14-query gold set (8 CS/ML + 2 biology + 2 math + 2 physics) with hand-curated known-relevant `arxiv_id`s, run through the real pipeline at `top_k=10`. Highlights from the latest run:
-
-| Metric | Result |
-|---|---|
-| Prefilter recall (keyword filter never drops a known-relevant paper) | 1.000 |
-| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.086 / 0.214 / 0.197 / 0.345 |
-| Justifier decoy-discrimination gap (top-k vs. random papers) | 8.07 / 10 |
-
-See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the gold query set, HyDE-vs-raw-query ablation results, and per-query breakdowns.
-
----
-
-## Corpus coverage
-
-The harvested corpus spans the full arXiv taxonomy: Computer Science · Mathematics · Physics · Astrophysics · Condensed Matter · High Energy Physics · Nuclear Physics · Nonlinear Sciences · Statistics · Quantitative Biology · Quantitative Finance · Economics · Electrical Engineering and Systems Science · Other Physics
