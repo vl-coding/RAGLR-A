@@ -5,6 +5,7 @@ Verifies pipeline wiring without requiring real models, API keys, or built index
 """
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from src.rag_lit.pipeline import RagLiteraturePipeline, _PaperMeta
@@ -65,7 +66,30 @@ def _make_retriever_results(papers):
     return dense, bm25
 
 
-def _build_mock_pipeline() -> RagLiteraturePipeline:
+def _default_encode_side_effect(texts, **kwargs):
+    """Returns one-hot-ish embeddings so distinct papers aren't near-duplicates.
+
+    Each text gets a unit vector with a 1.0 in a dimension determined by its
+    position in SAMPLE_PAPERS (falling back to a hash-based dimension for
+    unrecognized text), so unrelated papers have cosine similarity 0.
+    """
+    dim = max(len(SAMPLE_PAPERS), 1) + 1
+    vectors = []
+    for text in texts:
+        vec = np.zeros(dim)
+        matched = False
+        for i, p in enumerate(SAMPLE_PAPERS):
+            if p.text == text:
+                vec[i] = 1.0
+                matched = True
+                break
+        if not matched:
+            vec[-1] = 1.0
+        vectors.append(vec)
+    return np.array(vectors)
+
+
+def _build_mock_pipeline(encode_side_effect=None) -> RagLiteraturePipeline:
     """
     Constructs a RagLiteraturePipeline with all I/O and model calls mocked out.
 
@@ -93,6 +117,7 @@ def _build_mock_pipeline() -> RagLiteraturePipeline:
 
     mock_dense = MagicMock()
     mock_dense.search.return_value = dense_results
+    mock_dense.model.encode.side_effect = encode_side_effect or _default_encode_side_effect
 
     mock_bm25 = MagicMock()
     mock_bm25.search.return_value = bm25_results
@@ -294,3 +319,60 @@ def test_normal_length_query_does_not_trigger_dual_dense_search():
 
     assert response.debug.dense_results_raw_query is None
     assert response.debug.fused_results_raw_query is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #21: result-set near-duplicate flagging
+# ---------------------------------------------------------------------------
+
+def test_pipeline_no_duplicates_with_distinct_embeddings():
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=5,
+    )
+    for result in response.results:
+        assert result.possible_duplicate_of is None
+
+
+def test_pipeline_flags_near_duplicate_results():
+    # Make papers 1 and 2 (rank 1 and 2 in the dense/bm25 mock results)
+    # return identical embeddings, so they should be flagged as near-duplicates
+    # of each other; the rest get distinct embeddings.
+    dup_ids = {SAMPLE_PAPERS[0].arxiv_id, SAMPLE_PAPERS[1].arxiv_id}
+
+    def encode_side_effect(texts, **kwargs):
+        dim = len(SAMPLE_PAPERS) + 1
+        vectors = []
+        for text in texts:
+            vec = np.zeros(dim)
+            matched_dup = False
+            for p in SAMPLE_PAPERS:
+                if p.text == text and p.arxiv_id in dup_ids:
+                    vec[0] = 1.0  # shared dimension -> identical embedding
+                    matched_dup = True
+                    break
+            if not matched_dup:
+                for i, p in enumerate(SAMPLE_PAPERS):
+                    if p.text == text:
+                        vec[i + 1] = 1.0
+                        break
+                else:
+                    vec[-1] = 1.0
+            vectors.append(vec)
+        return np.array(vectors)
+
+    pipeline = _build_mock_pipeline(encode_side_effect=encode_side_effect)
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=5,
+    )
+
+    by_id = {r.arxiv_id: r for r in response.results}
+
+    paper1, paper2 = SAMPLE_PAPERS[0], SAMPLE_PAPERS[1]
+    assert by_id[paper1.arxiv_id].possible_duplicate_of == [paper2.arxiv_id]
+    assert by_id[paper2.arxiv_id].possible_duplicate_of == [paper1.arxiv_id]
+
+    for p in SAMPLE_PAPERS[2:]:
+        assert by_id[p.arxiv_id].possible_duplicate_of is None

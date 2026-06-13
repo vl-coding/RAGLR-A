@@ -20,6 +20,7 @@ retrieval:
   target_reduction_max_percent: 99
   canonical_papers_path: "data/canonical_papers.yaml"
   bm25_mmap: false
+  near_duplicate_threshold: 0.92
 
 models:
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"

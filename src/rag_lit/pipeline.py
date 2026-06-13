@@ -12,6 +12,7 @@ from .preprocessing import (
     reduction_percent,
 )
 from .canonical_boost import load_canonical_papers, match_canonical_papers
+from .dedup import find_near_duplicates, DEFAULT_NEAR_DUPLICATE_THRESHOLD
 from .keyword_index import open_keyword_index_db, candidate_ids_from_keywords
 from .metadata_db import build_metadata_db, load_metadata_db
 from .qwen_prefilter import QwenKeywordExtractor
@@ -390,6 +391,27 @@ class RagLiteraturePipeline:
 
         canonical_ids = {item["doc_id"] for item in canonical_results}
 
+        # Result-level near-duplicate detection (issue #21): flag papers in
+        # this result set whose title+abstract embedding is near-identical
+        # to another result's, using the same SBERT model as dense retrieval.
+        # O(N^2) on the small top-k result set, which is cheap.
+        near_duplicates: Dict[str, List[str]] = {}
+        if len(top_items) >= 2:
+            dedup_ids = [item["doc_id"] for item in top_items]
+            dedup_texts = [top_papers[doc_id].text for doc_id in dedup_ids]
+            dedup_embeddings = self.dense.model.encode(
+                dedup_texts,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+            near_duplicates = find_near_duplicates(
+                dedup_ids,
+                dedup_embeddings,
+                threshold=self.config["retrieval"].get(
+                    "near_duplicate_threshold", DEFAULT_NEAR_DUPLICATE_THRESHOLD
+                ),
+            )
+
         final_results = []
         for item in top_items:
             paper = top_papers[item["doc_id"]]
@@ -412,6 +434,7 @@ class RagLiteraturePipeline:
                     relevance_justification=justification.get("relevance_justification"),
                     relevance_score=justification.get("relevance_score"),
                     specificity_score=justification.get("specificity_score"),
+                    possible_duplicate_of=near_duplicates.get(item["doc_id"]),
                 )
             )
 
