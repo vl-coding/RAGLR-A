@@ -166,6 +166,8 @@ if search_button:
                 "literature."
             )
 
+        rank_by_id = {paper.arxiv_id: paper.rank for paper in response.results}
+
         for paper in response.results:
             with st.container():
                 title = f"#### {paper.rank}. {paper.title}"
@@ -204,6 +206,22 @@ if search_button:
                     st.caption(" · ".join(scores))
 
                 st.write(paper.abstract_snippet + ("..." if len(paper.abstract_snippet) >= 500 else ""))
+
+                if paper.possible_duplicate_of:
+                    dup_ranks = sorted(
+                        rank_by_id[aid] for aid in paper.possible_duplicate_of if aid in rank_by_id
+                    )
+                    if dup_ranks:
+                        dup_labels = ", ".join(f"#{r}" for r in dup_ranks)
+                        st.caption(
+                            f":large_yellow_circle: **Possible near-duplicate** of result "
+                            f"{dup_labels} — very similar title/abstract.",
+                            help=(
+                                "These results have near-identical title+abstract "
+                                "embeddings and may be the same work under a "
+                                "different arXiv ID."
+                            ),
+                        )
 
                 if paper.url:
                     st.markdown(f"[View on arXiv →]({paper.url})")

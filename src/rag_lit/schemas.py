@@ -52,6 +52,18 @@ class PaperResult(BaseModel):
     relevance_justification: Optional[str] = None
     relevance_score: Optional[float] = None
     specificity_score: Optional[float] = None
+    possible_duplicate_of: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "arxiv_ids of other papers in this same result set whose "
+            "title+abstract embedding is near-identical to this paper's "
+            "(cosine similarity above the near-duplicate threshold). "
+            "None or empty if no near-duplicates were found in this result "
+            "set. This does not detect near-duplicates across the wider "
+            "corpus -- only among the small set of results returned for "
+            "this query (issue #21)."
+        ),
+    )
 
 
 class RetrievalTrace(BaseModel):
