@@ -137,7 +137,10 @@ RAGLR-A/
 
 ```bash
 pip install -r requirements.txt
+pip install -e .
 ```
+
+The second command installs `src/rag_lit` in editable mode so that `from src.rag_lit...` imports work regardless of the current working directory or how a script is invoked.
 
 ### 2. Configure API keys
 

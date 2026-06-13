@@ -17,6 +17,12 @@ Why OAI-PMH:
     arXiv recommends OAI-PMH for bulk metadata harvesting and keeping
     an up-to-date copy of arXiv metadata.
 
+Metadata format:
+    Uses metadataPrefix=arXiv (configs/config.yaml: data.oai_metadata_prefix),
+    which reliably populates <categories> (including cross-listings) and
+    structured authors/dates -- unlike oai_dc, where dc:subject rarely
+    contains category codes.
+
 Example commands:
 
     First small test:
@@ -114,14 +120,6 @@ def get_child_text_by_local_name(element: ET.Element, name: str) -> Optional[str
         if local_name(child.tag) == name:
             return child.text
     return None
-
-
-def get_all_child_texts_by_local_name(element: ET.Element, name: str) -> List[str]:
-    values = []
-    for child in element.iter():
-        if local_name(child.tag) == name and child.text:
-            values.append(normalize_whitespace(child.text))
-    return values
 
 
 # -----------------------------
@@ -234,27 +232,6 @@ def extract_resumption_token(root: ET.Element) -> Optional[str]:
 # Metadata parsing
 # -----------------------------
 
-def extract_arxiv_id_from_identifier(identifier: str) -> Optional[str]:
-    """
-    Handles identifiers like:
-        oai:arXiv.org:2301.12345
-        https://arxiv.org/abs/2301.12345
-        http://arxiv.org/abs/math/0309136
-    """
-    if not identifier:
-        return None
-
-    identifier = identifier.strip()
-
-    if "oai:arXiv.org:" in identifier:
-        return identifier.split("oai:arXiv.org:", 1)[1].strip()
-
-    if "arxiv.org/abs/" in identifier:
-        return identifier.rsplit("/abs/", 1)[1].strip()
-
-    return None
-
-
 def extract_year(date_values: List[str]) -> Optional[int]:
     """
     Attempts to extract a year from OAI dc:date values.
@@ -267,56 +244,54 @@ def extract_year(date_values: List[str]) -> Optional[int]:
     return None
 
 
-def split_categories(subject_values: List[str]) -> List[str]:
+def parse_authors_arxiv(record: ET.Element) -> List[str]:
     """
-    OAI dc:subject may contain:
-        - arXiv categories like cs.AI
-        - multiple categories in one string
-        - non-category subject text
-
-    This function keeps arXiv-like category tokens.
+    Extracts authors from the arXiv metadata format's
+    <authors><author><keyname>/<forenames></author></authors> elements,
+    formatted as "Keyname, Forenames" to match the prior dc:creator
+    convention.
     """
-    category_pattern = re.compile(
-        r"\b("
-        r"astro-ph(?:\.[A-Z]{2})?|"
-        r"cond-mat(?:\.[a-z-]+)?|"
-        r"cs\.[A-Z]{2}|"
-        r"econ\.[A-Z]{2}|"
-        r"eess\.[A-Z]{2}|"
-        r"gr-qc|"
-        r"hep-ex|hep-lat|hep-ph|hep-th|"
-        r"math(?:\.[A-Z]{2})?|"
-        r"math-ph|"
-        r"nlin(?:\.[A-Z]{2})?|"
-        r"nucl-ex|nucl-th|"
-        r"physics(?:\.[a-z-]+)?|"
-        r"q-bio\.[A-Z]{2}|"
-        r"q-fin\.[A-Z]{2}|"
-        r"quant-ph|"
-        r"stat\.[A-Z]{2}"
-        r")\b"
-    )
+    authors = []
 
-    categories = set()
+    for element in record.iter():
+        if local_name(element.tag) != "author":
+            continue
 
-    for subject in subject_values:
-        for match in category_pattern.findall(subject):
-            categories.add(match)
+        keyname = None
+        forenames = None
 
-    return sorted(categories)
+        for child in element:
+            name = local_name(child.tag)
+
+            if name == "keyname" and child.text:
+                keyname = normalize_whitespace(child.text)
+            elif name == "forenames" and child.text:
+                forenames = normalize_whitespace(child.text)
+
+        if keyname and forenames:
+            authors.append(f"{keyname}, {forenames}")
+        elif keyname:
+            authors.append(keyname)
+
+    return authors
 
 
 def parse_oai_record(record: ET.Element, drop_stats: Optional[Dict[str, int]] = None) -> Optional[dict]:
     """
-    Parses one OAI-PMH record using oai_dc metadata.
+    Parses one OAI-PMH record using the "arXiv" metadata format
+    (metadataPrefix=arXiv).
 
-    Expected useful fields:
-        dc:title
-        dc:creator
-        dc:description
-        dc:subject
-        dc:identifier
-        dc:date
+    Expected useful fields (within the <arXiv> metadata element):
+        id
+        title
+        abstract
+        authors/author/keyname, forenames
+        categories (space-separated, e.g. "cs.LG cs.AI stat.ML")
+        created, updated
+
+    Unlike the oai_dc format, <categories> is reliably populated here,
+    including cross-listings, with the first entry being the primary
+    category.
 
     The parser uses local XML tag names so it is namespace-tolerant.
 
@@ -335,43 +310,33 @@ def parse_oai_record(record: ET.Element, drop_stats: Optional[Dict[str, int]] = 
                 _bump("deleted")
                 return None
 
-    title_values = get_all_child_texts_by_local_name(record, "title")
-    creator_values = get_all_child_texts_by_local_name(record, "creator")
-    description_values = get_all_child_texts_by_local_name(record, "description")
-    subject_values = get_all_child_texts_by_local_name(record, "subject")
-    identifier_values = get_all_child_texts_by_local_name(record, "identifier")
-    date_values = get_all_child_texts_by_local_name(record, "date")
-
-    arxiv_id = None
-    url = None
-
-    for identifier in identifier_values:
-        possible_id = extract_arxiv_id_from_identifier(identifier)
-
-        if possible_id:
-            arxiv_id = possible_id
-
-        if "arxiv.org/abs/" in identifier:
-            url = identifier
+    arxiv_id = get_child_text_by_local_name(record, "id")
 
     if not arxiv_id:
         _bump("no_arxiv_id")
         return None
 
-    title = normalize_whitespace(clean_latex_artifacts(title_values[0])) if title_values else ""
+    arxiv_id = arxiv_id.strip()
 
-    # Usually the abstract is in dc:description.
-    abstract = (
-        normalize_whitespace(clean_latex_artifacts(description_values[0]))
-        if description_values
-        else ""
-    )
+    title_text = get_child_text_by_local_name(record, "title")
+    title = normalize_whitespace(clean_latex_artifacts(title_text)) if title_text else ""
 
-    authors = [normalize_whitespace(author) for author in creator_values if author]
+    abstract_text = get_child_text_by_local_name(record, "abstract")
+    abstract = normalize_whitespace(clean_latex_artifacts(abstract_text)) if abstract_text else ""
 
-    categories = split_categories(subject_values)
+    authors = parse_authors_arxiv(record)
 
-    year = extract_year(date_values)
+    categories_text = get_child_text_by_local_name(record, "categories")
+    categories = categories_text.split() if categories_text else []
+    primary_category = categories[0] if categories else None
+
+    created = get_child_text_by_local_name(record, "created")
+    updated = get_child_text_by_local_name(record, "updated")
+
+    created = normalize_whitespace(created) if created else None
+    updated = normalize_whitespace(updated) if updated else None
+
+    year = extract_year([created]) if created else None
 
     if year is None:
         # Fallback: arXiv IDs after 2007 often start with YYMM.
@@ -384,8 +349,7 @@ def parse_oai_record(record: ET.Element, drop_stats: Optional[Dict[str, int]] = 
     if year is None:
         year = 0
 
-    if not url:
-        url = f"https://arxiv.org/abs/{arxiv_id}"
+    url = f"https://arxiv.org/abs/{arxiv_id}"
 
     if not title or not abstract:
         # Keep the system clean by skipping records without enough retrieval text.
@@ -399,8 +363,12 @@ def parse_oai_record(record: ET.Element, drop_stats: Optional[Dict[str, int]] = 
         "title": title,
         "abstract": abstract,
         "authors": authors,
+        "primary_category": primary_category,
         "categories": categories,
+        "category_metadata": [],
         "year": year,
+        "published_date": created,
+        "updated_date": updated,
         "url": url,
         "source": "arxiv_oai_pmh",
         "updated_at_utc": utc_now_iso(),

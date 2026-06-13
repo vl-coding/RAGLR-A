@@ -6,7 +6,7 @@ data:
   max_papers: null
   update_source: "oai_pmh"
   oai_base_url: "https://oaipmh.arxiv.org/oai"
-  oai_metadata_prefix: "oai_dc"
+  oai_metadata_prefix: "arXiv"
 
 retrieval:
   default_top_k: 10
