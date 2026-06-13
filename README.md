@@ -6,9 +6,11 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 ## Demo
 
-_Screenshots and full results page coming soon — being refreshed to reflect recent pipeline fixes._
+![Streamlit UI showing search results with category filter and relevance justifications](docs/media/03_results.png)
 
-This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model for keyword extraction. On CPU, a single query takes roughly **1 minute end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
+A short screen recording of a live query (including the "Limit to arXiv categories" filter from issue #10) is at [docs/media/streamlit_demo.webm](docs/media/streamlit_demo.webm).
+
+This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model for keyword extraction. On CPU, a single query takes roughly **1-2 minutes end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification — see [Limitations](#limitations) for why the dense-retrieval step can dominate this). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
 
 If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — watch the video walkthrough instead:
 
@@ -33,7 +35,7 @@ Each query flows through the following stages:
 Every response also includes a `RetrievalTrace`: search-space reduction stats, latency breakdowns, and the keywords generated along the way.
 
 ### Interfaces
-- **Streamlit UI** — query input, progress tracking, and results display
+- **Streamlit UI** — query input, progress tracking, optional arXiv category filtering, and results display
 - **FastAPI REST server** — `/search` endpoint with interactive docs
 - **CLI runner** — `scripts/run_query.py` for quick ad-hoc queries
 
@@ -74,6 +76,8 @@ See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the g
 
 ## Limitations
 
+- **Dense retrieval cold-start latency** — on the full 3.07M-paper corpus, the first query in a process pays a ~60-70s one-time cost for ChromaDB to load its HNSW index from disk, dominating total query latency for short-lived processes (e.g. the CLI)
+- **Qwen keyword prefilter can return empty** — for some specific, well-formed queries the model emits a literal `[]`, skipping the keyword-based search-space reduction for that query (the rest of the pipeline still runs correctly over the full corpus)
 - **Old foundational papers rank poorly** — decade-old vocabulary doesn't compete with modern phrasing on lexical (BM25) or semantic (dense) similarity
 - **Small gold query set** (14 queries, 4 `relevant_ids` each) — metrics are a noisy lower bound on true recall
 - **Lightweight embedding model** (`all-MiniLM-L6-v2`) may underperform on notation-heavy math/physics queries
