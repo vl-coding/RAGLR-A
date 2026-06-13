@@ -63,6 +63,15 @@ class RetrievalTrace(BaseModel):
     dense_latency_seconds: float = 0.0
     bm25_latency_seconds: float = 0.0
     total_latency_seconds: float = 0.0
+    short_query_dual_dense: bool = Field(
+        default=False,
+        description=(
+            "True if the query had fewer than "
+            "rag_lit.pipeline.SHORT_QUERY_WORD_THRESHOLD words, in which case "
+            "the raw-query dense ranking was fused alongside the HyDE-document "
+            "dense ranking in the default retrieval path (issue #14)."
+        ),
+    )
 
 
 class RetrievalDebugInfo(BaseModel):

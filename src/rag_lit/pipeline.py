@@ -27,6 +27,22 @@ class _PaperMeta(NamedTuple):
     categories: Tuple[str, ...] = ()
 
 
+# Queries with fewer words than this are treated as "short/ambiguous" (issue #14):
+# HyDE's hypothetical abstract is conditioned solely on the query text, and very
+# short queries give it little to anchor on, so the generated abstract can skew
+# dense retrieval toward an unintended direction. For such queries, the dual
+# raw-query-vs-HyDE dense search + RRF fusion (previously only available via the
+# hyde_ablation debug flag, see issue #2) is folded into the default dense ranked
+# list, giving the raw query's embedding a chance to surface relevant results that
+# the HyDE-document embedding alone might miss.
+SHORT_QUERY_WORD_THRESHOLD = 4
+
+
+def _is_short_query(query: str) -> bool:
+    """True if `query` has fewer than SHORT_QUERY_WORD_THRESHOLD whitespace-separated words."""
+    return len(query.split()) < SHORT_QUERY_WORD_THRESHOLD
+
+
 class RagLiteraturePipeline:
     def __init__(self, config: dict):
         self.config = config
@@ -274,8 +290,13 @@ class RagLiteraturePipeline:
         )
         dense_latency = time.time() - dense_start
 
+        # Short/ambiguous queries (issue #14) get the raw-query-vs-HyDE dual dense
+        # search unconditionally, reusing the machinery hyde_ablation=True added
+        # for debugging (issue #2). For normal-length queries this stays opt-in
+        # via hyde_ablation to avoid the extra dense search's latency cost.
+        is_short_query = _is_short_query(query)
         dense_results_raw_query = None
-        if hyde_ablation:
+        if hyde_ablation or is_short_query:
             dense_results_raw_query = self.dense.search(
                 query_text=query,
                 candidate_ids=list(final_candidate_ids),
@@ -323,6 +344,13 @@ class RagLiteraturePipeline:
         )
         if canonical_results:
             ranked_lists.append(canonical_results)
+
+        # For short/ambiguous queries, fold the raw-query dense ranking into the
+        # main fusion alongside the HyDE-document dense ranking, so results that
+        # rank well on the literal query (but not the generated abstract) can
+        # still surface in the default result set (issue #14).
+        if is_short_query and dense_results_raw_query is not None:
+            ranked_lists.append(dense_results_raw_query)
 
         fused = reciprocal_rank_fusion(ranked_lists, k=self.config["retrieval"]["rrf_k"])
         top_items = fused[:top_k]
@@ -398,6 +426,7 @@ class RagLiteraturePipeline:
             dense_latency_seconds=round(dense_latency, 3),
             bm25_latency_seconds=round(bm25_latency, 3),
             total_latency_seconds=round(time.time() - start_total, 3),
+            short_query_dual_dense=is_short_query,
         )
 
         _report("Done", 1.0)

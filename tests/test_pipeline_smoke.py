@@ -245,3 +245,52 @@ def test_pipeline_result_ranks_are_sequential():
     )
     ranks = [r.rank for r in response.results]
     assert ranks == list(range(1, len(ranks) + 1))
+
+
+# ---------------------------------------------------------------------------
+# Issue #14: short/ambiguous query -> dual raw-query/HyDE dense fusion
+# ---------------------------------------------------------------------------
+
+def test_short_query_triggers_dual_dense_search_and_fusion():
+    """A short query (< SHORT_QUERY_WORD_THRESHOLD words) should run dense
+    search twice (HyDE document + raw query) and fold both rankings into the
+    default fused result set, even though hyde_ablation was not requested."""
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="diffusion models",  # 2 words, below the default threshold of 4
+        top_k=3,
+        debug=True,
+    )
+
+    assert response.trace.short_query_dual_dense is True
+    # dense.search called twice: once for the HyDE document, once for the raw query
+    assert pipeline.dense.search.call_count == 2
+    called_query_texts = {c.kwargs["query_text"] for c in pipeline.dense.search.call_args_list}
+    assert called_query_texts == {"A hypothetical abstract about AI.", "diffusion models"}
+
+    # debug info still exposes the raw-query dense results even without hyde_ablation
+    assert response.debug.dense_results_raw_query is not None
+
+    # the fused (default) result set incorporates the raw-query dense ranking
+    assert isinstance(response, SearchResponse)
+    assert len(response.results) == 3
+
+
+def test_normal_length_query_does_not_trigger_dual_dense_search():
+    """A normal-length query should keep the current HyDE-only dense search as
+    the default retrieval path: a single dense.search call, no raw-query dense
+    results, and short_query_dual_dense=False."""
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="What are recent advances in transformer-based language models?",
+        top_k=3,
+        debug=True,
+    )
+
+    assert response.trace.short_query_dual_dense is False
+    assert pipeline.dense.search.call_count == 1
+    called_query_texts = {c.kwargs["query_text"] for c in pipeline.dense.search.call_args_list}
+    assert called_query_texts == {"A hypothetical abstract about AI."}
+
+    assert response.debug.dense_results_raw_query is None
+    assert response.debug.fused_results_raw_query is None
