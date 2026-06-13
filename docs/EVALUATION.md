@@ -203,12 +203,23 @@ Overall precision/recall/NDCG dropped slightly versus the pre-fix run (0.121→0
 
 ### Justifier score calibration
 
+**Pre-rubric prompt** (`claude_justifier_v1.txt` before issue #16, 14-query gold set):
+
 | Score | n | mean | stdev | min | max |
 |---|---|---|---|---|---|
 | `relevance_score` | 140 | 9.071 | 0.957 | 6 | 10 |
 | `specificity_score` | 140 | 8.121 | 0.714 | 6 | 10 |
 
 Decoy discrimination (mean top-k `relevance_score` vs. mean score for 5 random decoy papers per query, `--decoys 5`): **mean gap = 8.071** (per-query gaps range 6.8–9.0, decoy mean = 1.0 for every query). Claude's relevance scoring clearly separates retrieved top-k results from random papers, but scores are tightly clustered near the top of the 1–10 scale (mean ~9, stdev <1) — the justifier is better at flagging "not relevant at all" than at finely ranking degrees of relevance among already-retrieved papers.
+
+**Rubric/anchor prompt** (issue #16 fix, same `claude_justifier_v1.txt` structure but each score level now has a fixed, query-independent description — e.g. relevance 10 = "central contribution is this exact topic / primary citation", 6-7 = "related but main contribution targets a different problem", 1 = "unrelated"; full 26-query gold set, `--decoys 5`):
+
+| Score | n | mean | stdev | min | max |
+|---|---|---|---|---|---|
+| `relevance_score` | 260 | 8.988 | 1.124 | 4 | 10 |
+| `specificity_score` | 260 | 7.865 | 1.479 | 4 | 9 |
+
+Decoy discrimination: **mean gap = 7.912** (decoy mean ~1.0–1.2 for every query), essentially unchanged from the pre-rubric run. The rubric anchors widen both distributions without weakening decoy discrimination: `relevance_score` stdev rose from 0.957 to 1.124 and its observed range extended down to 4 (from 6); `specificity_score` stdev roughly doubled (0.714 → 1.479) and its range extended down to 4 (from 6) while the observed max dropped to 9 (from 10). Scores still cluster in the upper half of the scale — Claude continues to rate already-retrieved (pre-filtered) results as broadly relevant — but the rubric gives each numeric level a fixed, query-independent meaning, so an 8 now corresponds to the same anchor description ("substantially addresses the query topic, e.g. same problem via a different method") regardless of which query produced it. This is a calibration improvement (consistent meaning per score) rather than a full fix for the clustering itself, which is an inherent property of scoring already-relevant, pre-filtered results.
 
 ---
 
