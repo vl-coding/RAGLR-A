@@ -1,18 +1,35 @@
 """
-Chunked dense index builder with ONNX Runtime backend.
+Chunked dense index builder with ONNX Runtime or PyTorch backend.
 
 Streams the JSONL in chunks so RAM stays bounded (~1-2 GB peak instead of
-loading all 2.68M papers at once), encodes each chunk via ONNX Runtime
-(2-3x faster than PyTorch CPU), and upserts to the ChromaDB persistent store.
+loading all 2.68M papers at once), encodes each chunk via the selected
+backend, and upserts to the ChromaDB persistent store.
 
 Crash-safe: upserts are idempotent by arxiv_id, so a restart resumes from
 whatever is already in ChromaDB (chunks that were upserted survive).
 
-After this completes, run:  python scripts/build_indexes.py --skip-dense
+Backend notes (see docs/LIMITATIONS.md > Performance > Index build time):
+- "onnx"'s *default* ONNX file is not reliably faster than "torch" on CPU --
+  benchmarked at ~28 papers/sec vs torch's ~35 papers/sec on a 12-core/no-GPU
+  machine. If your CPU supports AVX-512, pass
+  `--onnx-file onnx/model_qint8_avx512.onnx` for a ~10-15% gain over torch.
+  Always benchmark both on your hardware before a multi-hour run.
+- If a CUDA GPU is available, both backends use it automatically
+  (`torch.cuda.is_available()`); for "onnx" this additionally requires the
+  `onnxruntime-gpu` package. GPU is the only lever that gives a large
+  (order-of-magnitude) speedup for this model size.
+
+This script is for the *initial* full-corpus build (or disaster recovery).
+For ongoing updates after the initial build, use
+`scripts/incremental_update.py`, which embeds only newly-harvested papers
+(seconds-to-minutes, not hours) -- a full rebuild is not required per harvest.
+
+After this completes, run:  python scripts/orchestrate_indexing.py
 
 Usage:
     python scripts/build_dense_index_fast.py
     python scripts/build_dense_index_fast.py --backend torch --batch-size 128
+    python scripts/build_dense_index_fast.py --backend onnx --onnx-file onnx/model_qint8_avx512.onnx
 """
 
 import argparse
@@ -62,9 +79,17 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=_DEFAULT_BATCH_SIZE)
     parser.add_argument(
         "--backend",
-        default="onnx",
+        default="torch",
         choices=["onnx", "torch"],
-        help="onnx uses ONNX Runtime (faster on CPU); torch uses PyTorch",
+        help="torch uses PyTorch (recommended default, see module docstring); "
+             "onnx uses ONNX Runtime, optionally with --onnx-file",
+    )
+    parser.add_argument(
+        "--onnx-file",
+        default=None,
+        help="ONNX model file name within the model repo (only used when "
+             "--backend onnx), e.g. 'onnx/model_qint8_avx512.onnx' for "
+             "AVX-512 CPUs. Defaults to sentence-transformers' auto-selection.",
     )
     parser.add_argument(
         "--jsonl",
@@ -95,8 +120,14 @@ def main() -> None:
     _print(f"Total papers: {total_papers:,}")
     _print()
 
-    backend_kwargs = {"backend": args.backend} if args.backend != "torch" else {}
-    _print(f"Loading model (backend={args.backend}) — ONNX export takes ~1 min on first run …")
+    backend_kwargs = {}
+    if args.backend != "torch":
+        backend_kwargs["backend"] = args.backend
+        if args.onnx_file:
+            backend_kwargs["model_kwargs"] = {"file_name": args.onnx_file}
+
+    _print(f"Loading model (backend={args.backend}{', file=' + args.onnx_file if args.onnx_file else ''}) "
+           f"— ONNX export takes ~1 min on first run …")
     model = SentenceTransformer(model_name, **backend_kwargs)
 
     client = chromadb.PersistentClient(path=persist_dir)

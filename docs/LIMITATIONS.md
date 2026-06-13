@@ -54,7 +54,17 @@ Claude is called once for HyDE and once per top-k result for justification. With
 ## Performance
 
 **Index build time**
-Building the dense index (ChromaDB + SBERT) over millions of papers is CPU/GPU-intensive and can take several hours on a standard machine without a GPU. BM25 and keyword index builds are faster but also memory-intensive for large corpora.
+The *initial* full-corpus dense index build (ChromaDB + SBERT, `scripts/build_dense_index_fast.py`) is CPU-intensive: benchmarked at ~34.5 papers/sec on a 12-core/no-GPU machine (`all-MiniLM-L6-v2`, torch backend, batch_size=128), which is ~24.7h for a 3.07M-paper corpus — consistent with the ~24-28h reported in practice.
+
+This is a **one-time cost**, not a per-harvest cost: `scripts/incremental_update.py` (run twice daily by `scripts/run_scheduler.py`) embeds only newly-harvested papers via `DenseRetriever.build_index` (typically dozens-to-hundreds of papers, seconds-to-minutes) and upserts them into the existing ChromaDB collection — a full rebuild is never required after the initial build.
+
+For the initial build (or disaster recovery), backend/batching tuning was investigated but gives only modest gains on CPU:
+- The ONNX Runtime backend's *default* file selection (`onnx/model.onnx`, fp32) measured **slower** than the torch backend (~27.9 vs ~34.5 papers/sec) — the "ONNX is 2-3x faster" assumption did not hold on this hardware. The "optimized" fp32 variant (`model_O4.onnx`) was worse still (~17.1 papers/sec).
+- The int8-quantized AVX-512 ONNX variant (`onnx/model_qint8_avx512.onnx`, pass via `--onnx-file`) measured ~38.7 papers/sec, only ~12% faster than torch — a ~2.7h saving on the full corpus, not the order-of-magnitude improvement the issue hoped for.
+- Larger batch sizes (256, 512) did not help and were slightly slower than 128; torch already saturates ~10 of 12 CPU threads via MKL at batch_size=128.
+- **GPU is the only lever with large headroom**: if `torch.cuda.is_available()` (or `onnxruntime-gpu` is installed for the ONNX backend), both `SentenceTransformer` backends use the GPU automatically with no code changes — for a 22M-parameter model like MiniLM, this typically gives an order-of-magnitude speedup over CPU, but wasn't available to benchmark on this dev machine.
+
+`scripts/build_dense_index_fast.py` streams the JSONL in chunks (bounded ~1-2GB RAM) and upserts are idempotent by `arxiv_id`, so a crashed/restarted initial build resumes from whatever ChromaDB already has. BM25 and keyword index builds are faster but also memory-intensive for large corpora.
 
 **Qwen local inference**
 Qwen2.5-0.5B-Instruct runs in float16 on GPU or float32 on CPU. On CPU, keyword extraction can add several seconds of latency per query. `generate_keywords` uses a `StoppingCriteria` (`_JSONArrayStoppingCriteria`) that stops generation as soon as the first JSON keyword array's brackets balance, rather than always running to `max_new_tokens=160` — this typically cuts generation short well before the token budget, since the answer array is usually much shorter than 160 tokens and the model sometimes continues with hallucinated extra output after it. `max_new_tokens=160` remains as a hard ceiling if the model never emits a balanced array. Consider disabling (`--no-qwen`) for low-latency use cases.

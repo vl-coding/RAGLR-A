@@ -186,7 +186,7 @@ models:
 
 ## Index build process
 
-Run once after each data harvest:
+**Initial build** (one-time, or disaster recovery):
 
 ```
 update_arxiv_data.py  →  arxiv_papers.jsonl
@@ -197,4 +197,6 @@ update_arxiv_data.py  →  arxiv_papers.jsonl
       (ChromaDB)         (bm25s)        (token → {arxiv_id})
 ```
 
-`scripts/orchestrate_indexing.py` runs `build_dense_index_fast.py`, `build_bm25_index.py`, `build_keyword_index.py`, and `build_metadata_db.py` end-to-end and writes `artifacts/manifest.json`.
+`scripts/orchestrate_indexing.py` runs `build_dense_index_fast.py`, `build_bm25_index.py`, `build_keyword_index.py`, and `build_metadata_db.py` end-to-end and writes `artifacts/manifest.json`. The dense build is the long pole (~24-28h on CPU for a 3M-paper corpus — see `docs/LIMITATIONS.md` > Performance > Index build time).
+
+**Steady state** (twice daily, via `run_scheduler.py`): `scripts/incremental_update.py` harvests new papers since the last run, appends them to `arxiv_delta.jsonl`, embeds and upserts just those papers into the existing ChromaDB collection, rebuilds the small delta BM25 index, and merges new tokens into the keyword index — all in seconds-to-minutes. The full `orchestrate_indexing.py` pipeline is **not** re-run per harvest.
