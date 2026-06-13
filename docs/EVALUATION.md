@@ -249,3 +249,34 @@ All six items from the issue #2 checklist are implemented in `scripts/evaluate_r
 6. **Bootstrap CI alongside Wilcoxon** — `eval_metrics.bootstrap_ci` (1000 resamples, 95% CI by default) is reported alongside every Wilcoxon test in `report_hyde`, for both the dense-stage and post-RRF comparisons, plus the rank-delta and pooled-judgment sections; a closing note reiterates the Claude-as-judge calibration caveat.
 
 **Not yet done**: an actual re-run of `--evals hyde e2e` (optionally with `--rank-delta-top-n 5000 --pooled-judgments`) against the 26-query set, to populate concrete numbers in this document. This is comparable in cost to the 14-query "Latest results" run (~10.5 min) times ~1.9x for the query count, plus the rank-delta/pooled-judgment overhead noted in "Running evaluation" if those flags are used.
+
+---
+
+## Qwen keyword-extraction quality (issue #4)
+
+The baseline run (`outputs/eval_report_prefilter_26q.json`, see "Gold query set" above) showed `kw_n` (keyword-candidate set size) ranging from 35,194 to 2,995,804 out of 3,067,125 papers — for several queries (e.g. "vision transformers for image classification" at 97.6% of the corpus, "machine learning methods for lattice quantum field theory" at 97.7%), the keyword prefilter barely narrowed the candidate set at all, even though `recall_final_candidates = 1.000` (safe but ineffective).
+
+Two changes address this, contained to the Qwen extraction step (`qwen_prefilter.py`, `prompts/qwen_keywords_v1.txt`) — `keyword_index.py`'s OR-of-tokens matching logic is unchanged:
+
+1. **Prompt rewrite**: ask for multi-word technical phrases (named methods, architectures, techniques, application domains) over generic single words, with an explicit stoplist example and a worked few-shot example.
+2. **Post-filtering** (`_filter_keywords`): drops single-word keywords whose normalized form is in a generic-term stoplist (e.g. "model", "method", "learning", "approach"), and dedupes case/plural near-duplicates (e.g. "Transformer" vs. "transformers"). Multi-word phrases pass through even if one of their words is generic (e.g. "graph neural networks" is kept). Applied to both `generate_keywords` output and `fallback_keywords`.
+
+A side effect of the prompt rewrite required a parsing fix: the new prompt's few-shot example sometimes causes the 0.5B model to continue generating additional hallucinated "Query:"/"Output:" pairs after the real answer. The old `text.index("[")` → `text.rindex("]")` parsing spanned across multiple JSON arrays and produced invalid JSON, silently triggering the raw-query fallback. The fix parses only the **first** JSON array (`text.index("[")` → first `]` after it), which is the actual answer to the query.
+
+### Before/after (`outputs/eval_report_prefilter_26q_v2.json`, 26-query set, `--evals prefilter --top-k 10`)
+
+| Metric | Before (issue #1 baseline) | After (issue #4) |
+|---|---|---|
+| mean `keyword_candidate_size` | 1,406,161 (45.8% of corpus) | 838,872 (27.4% of corpus) |
+| mean `recall_final_candidates` | 1.000 | 0.990 |
+
+Mean candidate-set size dropped by ~40% relative (45.8% → 27.4% of the 3,067,125-paper corpus), with the largest reductions on queries that were previously near-100% of the corpus, e.g.:
+
+| Query | `kw_n` before | `kw_n` after |
+|---|---|---|
+| "vision transformers for image classification" | 2,994,244 (97.6%) | 1,168,343 (38.1%) |
+| "machine learning methods for lattice quantum field theory" | 2,995,804 (97.7%) | 1,421,167 (46.3%) |
+| "normalization techniques for training deep neural networks" | 2,077,066 (67.7%) | 523,486 (17.1%) |
+| "generative adversarial networks for image synthesis" | 950,519 (31.0%) | 178,337 (5.8%) |
+
+**Recall caveat**: mean `recall_final_candidates` dropped from 1.000 to 0.990 — one of 104 `relevant_ids` (the "generative adversarial networks for image synthesis" query's `1406.2661`, Goodfellow et al. 2014) falls outside the new, more precise candidate set. Qwen now extracts `["image synthesis", "gan", "generator", "discriminator"]`, but that 2014 abstract uses "discriminative model"/"generative model G" rather than "gan"/"generator"/"discriminator", so none of those tokens match. This is the same vocabulary-drift pattern as "Old but significant papers rank poorly" above — a narrow prompt tweak (asking for both acronym and spelled-out forms, e.g. both "gan" and "generative adversarial network") was tried and found to be a wash: it fixed this query but introduced an equivalent miss on a different query ("reinforcement learning from human feedback for language model alignment"), with identical aggregate numbers (mean recall 0.990, mean `kw_n` ~27.4-27.8%). The prompt change was reverted as not worth the added complexity. `recall_final_candidates < 1.0` for a single query doesn't change pipeline behavior here since `final_candidate_size` (838,872+) is far above `min_prefilter_candidates` (500) — no fallback to the full corpus is triggered either way.

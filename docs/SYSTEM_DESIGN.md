@@ -64,7 +64,7 @@ User query
 
 ### 1. Qwen keyword prefilter (`qwen_prefilter.py`, `keyword_index.py`)
 
-`QwenKeywordExtractor` loads `Qwen/Qwen2.5-0.5B-Instruct` locally and prompts it to return a JSON list of ≤18 academic keywords for the query. Each keyword is tokenized and looked up in a prebuilt inverted index stored in SQLite (`keyword_index.sqlite3`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
+`QwenKeywordExtractor` loads `Qwen/Qwen2.5-0.5B-Instruct` locally and prompts it (`prompts/qwen_keywords_v1.txt`) to return a JSON list of ≤18 academic keywords for the query, favoring multi-word technical phrases over generic single words. The extracted (or raw-query-fallback) list is post-filtered by `_filter_keywords`, which drops generic single-word keywords (stoplist of terms like "model", "method", "learning") and dedupes case/plural near-duplicates while preserving multi-word phrases. Each remaining keyword is tokenized and looked up in a prebuilt inverted index stored in SQLite (`keyword_index.sqlite3`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
 
 The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs, stored as a `token -> comma-separated arxiv_ids` table. It is built at index time from paper titles and abstracts (`build_keyword_inverted_index` / `save_keyword_index_db` in `keyword_index.py`).
 
