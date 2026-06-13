@@ -64,7 +64,7 @@ User query
 
 ### 1. Qwen keyword prefilter (`qwen_prefilter.py`, `keyword_index.py`)
 
-`QwenKeywordExtractor` loads `Qwen/Qwen2.5-0.5B-Instruct` locally and prompts it (`prompts/qwen_keywords_v1.txt`) to return a JSON list of ≤18 academic keywords for the query, favoring multi-word technical phrases over generic single words. The extracted (or raw-query-fallback) list is post-filtered by `_filter_keywords`, which drops generic single-word keywords (stoplist of terms like "model", "method", "learning") and dedupes case/plural near-duplicates while preserving multi-word phrases. Each remaining keyword is tokenized and looked up in a prebuilt inverted index stored in SQLite (`keyword_index.sqlite3`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
+`QwenKeywordExtractor` loads `Qwen/Qwen2.5-0.5B-Instruct` locally and prompts it (`prompts/qwen_keywords_v1.txt`) to return a JSON list of ≤18 academic keywords for the query, favoring multi-word technical phrases over generic single words. Generation uses a `_JSONArrayStoppingCriteria` that stops as soon as the first JSON array's brackets balance (rather than always running to `max_new_tokens=160`), reducing typical CPU latency. The extracted (or raw-query-fallback) list is post-filtered by `_filter_keywords`, which drops generic single-word keywords (stoplist of terms like "model", "method", "learning") and dedupes case/plural near-duplicates while preserving multi-word phrases. Each remaining keyword is tokenized and looked up in a prebuilt inverted index stored in SQLite (`keyword_index.sqlite3`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
 
 The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs, stored as a `token -> comma-separated arxiv_ids` table. It is built at index time from paper titles and abstracts (`build_keyword_inverted_index` / `save_keyword_index_db` in `keyword_index.py`).
 
@@ -74,7 +74,7 @@ Hypothetical Document Embeddings: Claude Sonnet is prompted to write a 3–5 sen
 
 ### 3. Dense retrieval (`dense_retriever.py`)
 
-`sentence-transformers/all-MiniLM-L6-v2` encodes both papers (at index time) and the HyDE query (at search time) with L2-normalized embeddings. Vectors are stored in a ChromaDB persistent collection. At query time, a nearest-neighbor search returns up to `dense_candidates` (default 200) results from the candidate set, then post-filters by candidate ID.
+`sentence-transformers/all-MiniLM-L6-v2` encodes both papers (at index time) and the HyDE query (at search time) with L2-normalized embeddings. Vectors are stored in a ChromaDB persistent collection. At query time, a nearest-neighbor search returns up to `dense_candidates` (default 200) results from the candidate set, then post-filters by candidate ID. If the candidate set covers at least `dense_skip_filter_threshold_percent` (default 40%) of the corpus, filtering is skipped entirely and Chroma's unfiltered global top-k is used, since native ID-based filtering at that scale is ~50x slower than an unfiltered query. Otherwise, the result pool starts at `dense_candidates * 50` and doubles (up to `dense_candidates * 400` or the full corpus) until `dense_candidates` candidate-set members are found.
 
 ### 4. BM25 retrieval (`bm25_retriever.py`)
 
@@ -164,6 +164,7 @@ retrieval:
   bm25_candidates: 200        # papers retrieved by BM25
   rrf_k: 60                   # RRF smoothing constant
   min_prefilter_candidates: 500  # fallback threshold for keyword filter
+  dense_skip_filter_threshold_percent: 40  # skip dense candidate filtering above this % of corpus
 
 models:
   embedding_model: sentence-transformers/all-MiniLM-L6-v2

@@ -2,8 +2,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import torch
+from transformers import StoppingCriteriaList
 
-from src.rag_lit.qwen_prefilter import QwenKeywordExtractor, _filter_keywords
+from src.rag_lit.qwen_prefilter import QwenKeywordExtractor, _filter_keywords, _JSONArrayStoppingCriteria
 
 
 def test_filter_keywords_drops_generic_single_words():
@@ -90,3 +91,41 @@ def test_generate_keywords_falls_back_on_unparseable_output():
         "object",
         "detection",
     ]
+
+
+def test_generate_keywords_passes_stopping_criteria():
+    decoded = json.dumps(["vision transformers"])
+    extractor = _build_extractor_with_mock_model(decoded)
+
+    extractor.generate_keywords("some query")
+
+    _, kwargs = extractor.model.generate.call_args
+    criteria_list = kwargs["stopping_criteria"]
+    assert isinstance(criteria_list, StoppingCriteriaList)
+    assert isinstance(criteria_list[0], _JSONArrayStoppingCriteria)
+
+
+def _stopping_criteria(decoded_text: str) -> _JSONArrayStoppingCriteria:
+    tokenizer = MagicMock()
+    tokenizer.decode.return_value = decoded_text
+    return _JSONArrayStoppingCriteria(tokenizer, prompt_length=0)
+
+
+def test_json_array_stopping_criteria_false_before_any_bracket():
+    criteria = _stopping_criteria("Here is some text without brackets")
+    assert criteria(torch.zeros((1, 5), dtype=torch.long), None) is False
+
+
+def test_json_array_stopping_criteria_false_for_unbalanced_array():
+    criteria = _stopping_criteria('["transformer", "attention')
+    assert criteria(torch.zeros((1, 5), dtype=torch.long), None) is False
+
+
+def test_json_array_stopping_criteria_true_when_array_balances():
+    criteria = _stopping_criteria('["transformer", "attention"]')
+    assert criteria(torch.zeros((1, 5), dtype=torch.long), None) is True
+
+
+def test_json_array_stopping_criteria_ignores_trailing_array_after_first_closes():
+    criteria = _stopping_criteria('["transformer"]\nQuery: foo\nOutput: [')
+    assert criteria(torch.zeros((1, 5), dtype=torch.long), None) is True

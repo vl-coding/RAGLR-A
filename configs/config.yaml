@@ -15,6 +15,7 @@ retrieval:
   rrf_k: 60
   min_prefilter_candidates: 500
   max_prefilter_candidates: 50000
+  dense_skip_filter_threshold_percent: 40
   target_reduction_min_percent: 86
   target_reduction_max_percent: 99
   canonical_papers_path: "data/canonical_papers.yaml"

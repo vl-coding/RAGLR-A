@@ -81,6 +81,7 @@ class RagLiteraturePipeline:
         self.dense = DenseRetriever(
             model_name=config["models"]["embedding_model"],
             persist_dir=config["paths"]["dense_index_dir"],
+            skip_filter_threshold=config["retrieval"].get("dense_skip_filter_threshold_percent", 40) / 100,
         )
 
         self.bm25 = BM25Retriever.load(

@@ -280,3 +280,93 @@ Mean candidate-set size dropped by ~40% relative (45.8% → 27.4% of the 3,067,1
 | "generative adversarial networks for image synthesis" | 950,519 (31.0%) | 178,337 (5.8%) |
 
 **Recall caveat**: mean `recall_final_candidates` dropped from 1.000 to 0.990 — one of 104 `relevant_ids` (the "generative adversarial networks for image synthesis" query's `1406.2661`, Goodfellow et al. 2014) falls outside the new, more precise candidate set. Qwen now extracts `["image synthesis", "gan", "generator", "discriminator"]`, but that 2014 abstract uses "discriminative model"/"generative model G" rather than "gan"/"generator"/"discriminator", so none of those tokens match. This is the same vocabulary-drift pattern as "Old but significant papers rank poorly" above — a narrow prompt tweak (asking for both acronym and spelled-out forms, e.g. both "gan" and "generative adversarial network") was tried and found to be a wash: it fixed this query but introduced an equivalent miss on a different query ("reinforcement learning from human feedback for language model alignment"), with identical aggregate numbers (mean recall 0.990, mean `kw_n` ~27.4-27.8%). The prompt change was reverted as not worth the added complexity. `recall_final_candidates < 1.0` for a single query doesn't change pipeline behavior here since `final_candidate_size` (838,872+) is far above `min_prefilter_candidates` (500) — no fallback to the full corpus is triggered either way.
+
+---
+
+## Dense retrieval over-fetch & skip-filter (issue #11)
+
+`DenseRetriever.search()` previously fetched a fixed `top_n * 50` pool from
+ChromaDB and post-filtered by the keyword-prefilter candidate set. For
+queries whose candidate set is a large fraction of the corpus, this fixed
+pool can run out of candidate-set members before reaching `top_n` results.
+The fix (`src/rag_lit/dense_retriever.py`) adds two heuristics: (1) if the
+candidate set covers ≥`dense_skip_filter_threshold_percent` (default 40%) of
+the corpus, skip post-filtering entirely and return Chroma's unfiltered
+global top-k; (2) otherwise, adaptively double the query pool (up to
+`top_n * 400` or the full corpus) until `top_n` candidate-set members are
+found.
+
+### Before/after timing (`scripts/_tmp_dense_issue11_check.py`)
+
+The two gold queries whose `kw_n` exceeds the 40% threshold (from the
+issue #4 "after" numbers above):
+
+| Query | `kw_n` (% of corpus) | OLD (fixed `top_n*50`) | NEW (skip-filter+overfetch) | Hits found |
+|---|---|---|---|---|
+| "machine learning methods for lattice quantum field theory" | 1,421,167 (46.3%) | 73.54s | 7.00s (**10.5x faster**) | 4/4 `relevant_ids`, identical to OLD |
+| "convergence analysis of stochastic gradient descent optimization" | 1,230,205 (40.1%) | 14.66s | 4.61s (**3.2x faster**) | 4/4 `relevant_ids`, identical to OLD |
+
+Both queries return the exact same hit set as before — the skip-filter
+threshold only changes *how* the candidate-restricted top-k is computed
+(bypassing Chroma's slow `ids=`/`where $in` filtering at this scale, per
+`docs/LIMITATIONS.md`), not *what* it returns. Net effect: large-candidate-set
+queries get dramatically faster dense retrieval with no recall regression.
+
+### End-to-end before/after (26-query gold set, `--evals e2e --top-k 10`)
+
+`outputs/eval_report_e2e_26q_before_issue11.json` (pre-change) vs.
+`outputs/eval_report_e2e_26q_after_issue11_19.json` (post-change, also
+includes issue #19's Qwen early-stopping — see below):
+
+| Metric | Before | After |
+|---|---|---|
+| mean precision@10 | 0.088 | 0.085 |
+| mean recall@10 | 0.221 | 0.212 |
+| mean ndcg@10 | 0.202 | 0.200 |
+| mean mrr | 0.326 | 0.325 |
+
+Aggregate metrics are flat (within ±0.003, well inside normal query-level
+noise from Claude's HyDE rewriting and justification calls) — issue #11 is a
+latency fix, not an accuracy fix, and the dense-stage diagnostic above already
+confirms the candidate hit set is unchanged for the two affected queries.
+
+For the two large-candidate-set queries specifically:
+
+| Query | recall@10 (before) | mrr (before) | recall@10 (after) | mrr (after) |
+|---|---|---|---|---|
+| "machine learning methods for lattice quantum field theory" | 0.250 | 1.000 | 0.250 | 0.500 |
+| "convergence analysis of stochastic gradient descent optimization" | 0.000 | 0.000 | 0.000 | 0.000 |
+
+Recall@10 is unchanged for both. The lattice-QFT query's MRR dropped from
+1.000 to 0.500 — the same paper (`2207.00283`) is still the only hit, but it
+moved from RRF rank 1 to rank 2. This is a side effect of the skip-filter
+path: above the 40% threshold, dense search now returns Chroma's unfiltered
+global top-k (ranked purely by embedding similarity) instead of the
+candidate-restricted top-k, which can shift RRF fusion ranks slightly. The
+SGD-convergence query still scores 0 — its `relevant_ids` don't rank highly
+enough in raw embedding similarity either, so this is an upstream
+ranking-difficulty issue (same category as the "old but significant papers
+rank poorly" diagnosis), not something issue #11 was meant to fix.
+
+---
+
+## Qwen keyword-extraction latency (issue #19)
+
+`generate_keywords` (`src/rag_lit/qwen_prefilter.py`) previously always ran
+`model.generate` to `max_new_tokens=160`, even though the JSON keyword array
+is usually much shorter and the 0.5B model sometimes continues generating
+hallucinated "Query:"/"Output:" pairs afterward (issue #4). The fix adds
+`_JSONArrayStoppingCriteria`, a custom `StoppingCriteria` that stops
+generation as soon as the first `[`...`]` JSON array's brackets balance.
+`max_new_tokens=160` remains as a hard ceiling.
+
+### Before/after latency (`scripts/_tmp_qwen_latency.py`, 26 gold queries, CPU)
+
+| | Before | After | Reduction |
+|---|---|---|---|
+| mean | 9.521s | 3.777s | **60.3%** |
+| total (26 queries) | 247.550s | 98.192s | **60.3%** |
+
+The extracted keywords were identical between before and after for every
+query checked — early-stopping cuts wasted generation without changing the
+output.

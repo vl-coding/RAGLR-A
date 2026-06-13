@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import List
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteria, StoppingCriteriaList
 import torch
 
 from .keyword_index import tokenize
@@ -57,6 +57,30 @@ def _filter_keywords(keywords: List[str]) -> List[str]:
     return filtered
 
 
+class _JSONArrayStoppingCriteria(StoppingCriteria):
+    """Stop once the first `[`...`]` JSON array in the generated text is balanced."""
+
+    def __init__(self, tokenizer, prompt_length: int):
+        self.tokenizer = tokenizer
+        self.prompt_length = prompt_length
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        generated = input_ids[0][self.prompt_length:]
+        text = self.tokenizer.decode(generated, skip_special_tokens=True)
+        start = text.find("[")
+        if start == -1:
+            return False
+        depth = 0
+        for ch in text[start:]:
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    return True
+        return False
+
+
 class QwenKeywordExtractor:
     def __init__(self, model_name: str):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -79,11 +103,16 @@ class QwenKeywordExtractor:
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
+        stopping_criteria = StoppingCriteriaList([
+            _JSONArrayStoppingCriteria(self.tokenizer, inputs["input_ids"].shape[-1])
+        ])
+
         output = self.model.generate(
             **inputs,
             max_new_tokens=160,
             temperature=0.1,
-            do_sample=False
+            do_sample=False,
+            stopping_criteria=stopping_criteria,
         )
 
         # Decode only the newly generated tokens. The prompt now includes a
