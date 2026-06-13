@@ -381,3 +381,69 @@ generation as soon as the first `[`...`]` JSON array's brackets balance.
 The extracted keywords were identical between before and after for every
 query checked — early-stopping cuts wasted generation without changing the
 output.
+
+---
+
+## Embedding model benchmark (issue #12)
+
+`docs/LIMITATIONS.md` hypothesized that `all-MiniLM-L6-v2` (22M params,
+384-dim) might underperform larger embedding models (e.g.
+`all-mpnet-base-v2`, 110M params, 768-dim) on notation-heavy math/physics
+queries. To test this without a full 3.07M-paper re-embed (~25.5h for
+MiniLM, see "Index build time" in `docs/LIMITATIONS.md`), `scripts/build_embedding_benchmark.py`
+built a fixed 49,950-paper subset (all 104 `relevant_ids` from the 26-query
+gold set, plus ~49,846 randomly sampled papers, seeded) and indexed it
+separately with both models into `artifacts/benchmark_index_minilm/` and
+`artifacts/benchmark_index_mpnet/`. `scripts/benchmark_embedding_models.py`
+then ran all 26 gold queries (raw query text, dense-only, no HyDE/Claude)
+against both indexes — same documents in both, so any difference is
+attributable to the embedding model.
+
+### Results (`outputs/embedding_benchmark_report.json`, `--top-k 10`)
+
+| Domain (n) | Metric | MiniLM (current) | mpnet |
+|---|---|---|---|
+| CS/ML (20) | Recall@10 / NDCG@10 / MRR | 0.463 / 0.407 / 0.578 | 0.450 / 0.380 / 0.491 |
+| Biology (2) | Recall@10 / NDCG@10 / MRR | 1.000 / 0.991 / 1.000 | 1.000 / 1.000 / 1.000 |
+| Math (2) | Recall@10 / NDCG@10 / MRR | 1.000 / 1.000 / 1.000 | 1.000 / 1.000 / 1.000 |
+| Physics (2) | Recall@10 / NDCG@10 / MRR | 1.000 / 1.000 / 1.000 | 1.000 / 0.952 / 1.000 |
+| Math+Physics (4) | Recall@10 / NDCG@10 / MRR | 1.000 / 1.000 / 1.000 | 1.000 / 0.976 / 1.000 |
+| All (26) | Recall@10 / NDCG@10 / MRR | 0.587 / 0.543 / 0.675 | 0.577 / 0.519 / 0.608 |
+
+### Cost (49,950-paper benchmark subset)
+
+| | MiniLM (current) | mpnet | Ratio |
+|---|---|---|---|
+| Build throughput | 33.4 papers/sec | 3.2 papers/sec | mpnet ~10.4x slower |
+| Index size on disk | 545.2 MB | 622.6 MB | mpnet ~1.14x larger |
+| Mean per-query search latency | 0.048s | 0.076s | mpnet ~1.6x slower |
+| Extrapolated full-corpus (3.07M papers) build time | ~25.5h | **~266h (~11 days)** | — |
+
+### Conclusion
+
+mpnet shows **no improvement on math/physics queries** — recall@10 is
+already 1.000 for both models (a ceiling effect: these `relevant_ids` were
+originally derived via dense search over the live corpus, so they're biased
+toward whatever model's embedding space found them — see "Known evaluation
+gaps" below), and mpnet's NDCG@10 on physics is *lower* (0.952 vs 1.000).
+On the CS/ML queries (whose `relevant_ids` are retrieval-method-independent
+canonical papers), mpnet is also slightly worse on every metric. Combined
+with ~10x slower indexing (~11 days for a full re-embed vs. ~1 day) and
+~1.6x slower per-query search, **switching to `all-mpnet-base-v2` is not
+recommended** — there is no evidence it improves math/physics retrieval, and
+it would regress general retrieval quality and latency.
+
+`text-embedding-3-large` (issue #12's other candidate) was not benchmarked:
+since a generally stronger local SBERT model (mpnet) showed no gain here, an
+API-based model is unlikely to justify its added cost, latency, and
+dependency on an external API key, and remains out of scope unless future
+evidence (e.g. better-targeted math/physics qrels) suggests otherwise.
+
+**Caveat**: as noted in "Known evaluation gaps", the math/physics/biology
+`relevant_ids` have only 4 per query and were dense-search-sourced, so
+recall@10=1.000 for both models mostly reflects that ceiling rather than a
+true absence of headroom. A more discriminating test would need
+independently-curated math/physics qrels (analogous to the CS/ML canonical
+papers) — not pursued here, as the CS/ML results (retrieval-method-independent
+qrels) already show mpnet performing no better, and the cost case against a
+full re-embed is decisive regardless.
