@@ -3,10 +3,11 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Callable, Dict, NamedTuple, Optional, Set
+from typing import Callable, Dict, List, NamedTuple, Optional, Set, Tuple
 
 from .schemas import Paper, SearchResponse, PaperResult, RetrievalTrace, RetrievalDebugInfo
 from .preprocessing import (
+    candidate_ids_matching_categories,
     filter_by_candidate_ids,
     reduction_percent,
 )
@@ -23,6 +24,7 @@ from .justifier import ClaudeJustifier
 
 class _PaperMeta(NamedTuple):
     arxiv_id: str
+    categories: Tuple[str, ...] = ()
 
 
 class RagLiteraturePipeline:
@@ -120,7 +122,7 @@ class RagLiteraturePipeline:
             build_metadata_db(jsonl_path, db_path)
 
         rows, offsets = load_metadata_db(db_path)
-        meta = [_PaperMeta(arxiv_id) for arxiv_id, _categories in rows]
+        meta = [_PaperMeta(arxiv_id, tuple(categories)) for arxiv_id, categories in rows]
         return meta, offsets
 
     def _load_delta_meta_from(self, byte_pos: int) -> None:
@@ -143,7 +145,7 @@ class RagLiteraturePipeline:
                 arxiv_id = obj.get("arxiv_id", "")
                 if not arxiv_id or arxiv_id in self._delta_offsets:
                     continue
-                self._all_meta.append(_PaperMeta(arxiv_id))
+                self._all_meta.append(_PaperMeta(arxiv_id, tuple(obj.get("categories", []))))
                 self._delta_offsets[arxiv_id] = offset
                 self._delta_ids.add(arxiv_id)
             self._delta_read_pos = f.tell()
@@ -212,6 +214,7 @@ class RagLiteraturePipeline:
         top_k: int = 10,
         use_qwen_prefilter: bool = True,
         use_claude_justification: bool = True,
+        categories: Optional[List[str]] = None,
         progress_callback: Optional[Callable[[str, float], None]] = None,
         debug: bool = False,
         hyde_ablation: bool = False,
@@ -251,6 +254,12 @@ class RagLiteraturePipeline:
         else:
             final_candidate_ids = all_ids
             hyde_document = self.hyde.generate(query)
+
+        canonical_corpus_ids = all_ids
+        if categories:
+            category_ids = candidate_ids_matching_categories(self._all_meta, categories)
+            final_candidate_ids = final_candidate_ids & category_ids
+            canonical_corpus_ids = category_ids
 
         _report("Filtering candidates by keywords ...", 0.35)
         keyword_filtered = filter_by_candidate_ids(self._all_meta, final_candidate_ids)
@@ -310,7 +319,7 @@ class RagLiteraturePipeline:
             query=query,
             keywords=generated_keywords,
             canonical_papers=self._canonical_papers,
-            corpus_ids=all_ids,
+            corpus_ids=canonical_corpus_ids,
         )
         if canonical_results:
             ranked_lists.append(canonical_results)

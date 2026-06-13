@@ -48,7 +48,7 @@ SAMPLE_PAPERS = [
     for i in range(1, 6)
 ]
 
-_SAMPLE_META = [_PaperMeta(p.arxiv_id) for p in SAMPLE_PAPERS]
+_SAMPLE_META = [_PaperMeta(p.arxiv_id, tuple(p.categories)) for p in SAMPLE_PAPERS]
 _SAMPLE_OFFSETS = {p.arxiv_id: i * 100 for i, p in enumerate(SAMPLE_PAPERS)}
 _PAPER_LOOKUP = {p.arxiv_id: p for p in SAMPLE_PAPERS}
 
@@ -213,6 +213,28 @@ def test_pipeline_no_debug_by_default():
         top_k=2,
     )
     assert response.debug is None
+
+
+def test_pipeline_category_filter_matching_keeps_candidates():
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=2,
+        debug=True,
+        categories=["cs.AI"],
+    )
+    assert set(response.debug.final_candidate_ids) == {p.arxiv_id for p in SAMPLE_PAPERS}
+
+
+def test_pipeline_category_filter_no_match_empties_candidates():
+    pipeline = _build_mock_pipeline()
+    response = pipeline.run(
+        query="contrastive learning",
+        top_k=2,
+        debug=True,
+        categories=["cs.CV"],
+    )
+    assert response.debug.final_candidate_ids == []
 
 
 def test_pipeline_result_ranks_are_sequential():

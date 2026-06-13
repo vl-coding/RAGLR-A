@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -26,6 +29,15 @@ if "queries_used" not in st.session_state:
 if "pipeline" not in st.session_state:
     st.session_state.pipeline = None
 
+
+@st.cache_data
+def _load_category_options() -> list[str]:
+    manifest_path = Path(config["paths"].get("manifest", "artifacts/manifest.json"))
+    if not manifest_path.exists():
+        return []
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return sorted(manifest.get("category_counts", {}).keys())
+
 # -----------------------------------------------------------------------
 # Sidebar — branding + query counter
 # -----------------------------------------------------------------------
@@ -47,6 +59,13 @@ with st.sidebar:
     top_k = config["retrieval"]["default_top_k"]
     use_qwen = st.checkbox("Qwen keyword prefilter", value=True)
     use_justification = st.checkbox("Claude justifications", value=True)
+
+    category_options = _load_category_options()
+    selected_categories = st.multiselect(
+        "Limit to arXiv categories (optional)",
+        options=category_options,
+        help="Only return papers tagged with at least one of the selected categories.",
+    )
 
     st.markdown(f"**This demo returns the top {top_k} papers per query.**")
 
@@ -93,6 +112,7 @@ if search_button:
             top_k=top_k,
             use_qwen_prefilter=use_qwen,
             use_claude_justification=use_justification,
+            categories=selected_categories or None,
             progress_callback=_update_progress,
         )
 

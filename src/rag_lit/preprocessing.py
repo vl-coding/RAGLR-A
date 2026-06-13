@@ -1,5 +1,5 @@
 import re
-from typing import List, Set, Tuple
+from typing import Iterable, List, Set, Tuple
 
 from .schemas import Paper
 
@@ -39,6 +39,17 @@ def filter_by_candidate_ids(papers: List[Paper], candidate_ids: Set[str]) -> Lis
         return papers
 
     return [paper for paper in papers if paper.arxiv_id in candidate_ids]
+
+
+def candidate_ids_matching_categories(papers: Iterable, categories: Iterable[str]) -> Set[str]:
+    """Returns arxiv_ids of papers whose categories overlap `categories`.
+
+    Cross-listing aware: a paper matches if *any* of its categories is in
+    the requested set. `papers` items need only an `arxiv_id` and a
+    `categories` attribute (e.g. `_PaperMeta` or `Paper`).
+    """
+    wanted = set(categories)
+    return {paper.arxiv_id for paper in papers if wanted.intersection(paper.categories)}
 
 
 def apply_candidate_safety_rules(

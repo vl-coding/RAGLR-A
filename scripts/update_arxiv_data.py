@@ -180,6 +180,46 @@ def save_papers_jsonl(papers_by_id: Dict[str, dict], path: str) -> None:
 
 
 # -----------------------------
+# Harvest checkpointing
+#
+# A long harvest can take hours and span thousands of OAI requests, so a
+# single transient network failure shouldn't discard everything harvested
+# so far. As batches are harvested, parsed papers and the current
+# resumption token are appended/saved to disk; `--resume` picks back up
+# from there instead of restarting from batch #1.
+# -----------------------------
+
+def load_checkpoint(papers_path: str, state_path: str) -> tuple[List[dict], Optional[str]]:
+    papers: List[dict] = []
+
+    if Path(papers_path).exists():
+        with open(papers_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    papers.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+    resumption_token = None
+
+    if Path(state_path).exists():
+        with open(state_path, "r", encoding="utf-8") as f:
+            resumption_token = json.load(f).get("resumption_token")
+
+    return papers, resumption_token
+
+
+def clear_checkpoint(papers_path: str, state_path: str) -> None:
+    for path_str in (papers_path, state_path):
+        path = Path(path_str)
+        if path.exists():
+            path.unlink()
+
+
+# -----------------------------
 # OAI-PMH request handling
 # -----------------------------
 
@@ -190,18 +230,31 @@ def build_oai_url(base_url: str, params: dict) -> str:
 def fetch_oai_xml(
     base_url: str,
     params: dict,
-    max_retries: int = 3,
+    max_retries: int = 5,
     sleep_seconds: float = 3.0,
+    timeout_seconds: float = 120.0,
 ) -> ET.Element:
     """
     Makes a polite OAI-PMH request and parses XML.
 
-    If rate-limited or temporarily unavailable, retries.
+    If rate-limited, temporarily unavailable, or affected by a transient
+    network error (connection drop, read timeout), retries with backoff.
     """
     url = build_oai_url(base_url, params)
 
     for attempt in range(1, max_retries + 1):
-        response = requests.get(url, timeout=60)
+        try:
+            response = requests.get(url, timeout=timeout_seconds)
+        except requests.exceptions.RequestException as exc:
+            if attempt == max_retries:
+                raise RuntimeError(
+                    f"OAI request failed after {max_retries} attempts: {exc}"
+                ) from exc
+
+            wait = sleep_seconds * attempt
+            print(f"Request error ({exc.__class__.__name__}: {exc}). Retrying in {wait:.1f}s...")
+            time.sleep(wait)
+            continue
 
         if response.status_code == 200:
             return ET.fromstring(response.content)
@@ -390,6 +443,10 @@ def harvest_oai_records(
     max_records: Optional[int] = None,
     sleep_seconds: float = 3.0,
     drop_stats: Optional[Dict[str, int]] = None,
+    harvested: Optional[List[dict]] = None,
+    resumption_token: Optional[str] = None,
+    checkpoint_papers_path: Optional[str] = None,
+    checkpoint_state_path: Optional[str] = None,
 ) -> List[dict]:
     """
     Harvests records from arXiv OAI-PMH.
@@ -403,55 +460,77 @@ def harvest_oai_records(
     If drop_stats is provided, accumulates per-record outcome counts
     (see parse_oai_record) across the whole harvest.
 
+    `harvested` and `resumption_token` allow resuming a previously
+    interrupted harvest (see load_checkpoint). When `checkpoint_papers_path`
+    and `checkpoint_state_path` are given, newly parsed papers and the
+    current resumption token are persisted after every batch.
+
     Note:
         For a complete production harvest, expect many requests.
         Use --max-records while testing.
     """
-    harvested = []
-    resumption_token = None
+    harvested = list(harvested) if harvested else []
     request_count = 0
 
-    while True:
-        if resumption_token:
-            params = {
-                "verb": "ListRecords",
-                "resumptionToken": resumption_token,
-            }
-        else:
-            params = {
-                "verb": "ListRecords",
-                "metadataPrefix": metadata_prefix,
-            }
+    checkpoint_file = None
+    if checkpoint_papers_path:
+        ensure_parent(checkpoint_papers_path)
+        checkpoint_file = open(checkpoint_papers_path, "a", encoding="utf-8")
 
-            if from_date:
-                params["from"] = from_date
+    try:
+        while True:
+            if resumption_token:
+                params = {
+                    "verb": "ListRecords",
+                    "resumptionToken": resumption_token,
+                }
+            else:
+                params = {
+                    "verb": "ListRecords",
+                    "metadataPrefix": metadata_prefix,
+                }
 
-        request_count += 1
-        print(f"Fetching OAI batch #{request_count}...")
+                if from_date:
+                    params["from"] = from_date
 
-        root = fetch_oai_xml(base_url=base_url, params=params)
+            request_count += 1
+            print(f"Fetching OAI batch #{request_count}...")
 
-        records = records_from_oai_root(root)
+            root = fetch_oai_xml(base_url=base_url, params=params)
 
-        for record in records:
-            paper = parse_oai_record(record, drop_stats=drop_stats)
+            records = records_from_oai_root(root)
 
-            if paper:
-                harvested.append(paper)
+            for record in records:
+                paper = parse_oai_record(record, drop_stats=drop_stats)
 
-            if max_records and len(harvested) >= max_records:
-                print(f"Reached max_records={max_records}. Stopping test harvest.")
-                return harvested
+                if paper:
+                    harvested.append(paper)
 
-        resumption_token = extract_resumption_token(root)
+                    if checkpoint_file:
+                        checkpoint_file.write(json.dumps(paper, ensure_ascii=False) + "\n")
 
-        print(f"Harvested valid papers so far: {len(harvested)}")
+                if max_records and len(harvested) >= max_records:
+                    print(f"Reached max_records={max_records}. Stopping test harvest.")
+                    return harvested
 
-        if not resumption_token:
-            break
+            resumption_token = extract_resumption_token(root)
 
-        # Be polite to arXiv.
-        time.sleep(sleep_seconds)
+            print(f"Harvested valid papers so far: {len(harvested)}")
+
+            if checkpoint_file:
+                checkpoint_file.flush()
+
+            if checkpoint_state_path:
+                save_state(checkpoint_state_path, {"resumption_token": resumption_token})
+
+            if not resumption_token:
+                break
+
+            # Be polite to arXiv.
+            time.sleep(sleep_seconds)
+    finally:
+        if checkpoint_file:
+            checkpoint_file.close()
 
     return harvested
 
@@ -543,6 +622,13 @@ def main():
         help="Seconds to sleep between OAI-PMH requests."
     )
 
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume a previously interrupted harvest from its checkpoint, "
+             "if one exists, instead of starting from batch #1."
+    )
+
     args = parser.parse_args()
 
     config = load_yaml(args.config)
@@ -592,6 +678,24 @@ def main():
 
     drop_stats: Dict[str, int] = {}
 
+    checkpoint_papers_path = "artifacts/harvest_checkpoint_papers.jsonl"
+    checkpoint_state_path = "artifacts/harvest_checkpoint_state.json"
+
+    initial_harvested: List[dict] = []
+    initial_resumption_token: Optional[str] = None
+
+    if args.resume and Path(checkpoint_papers_path).exists():
+        initial_harvested, initial_resumption_token = load_checkpoint(
+            checkpoint_papers_path, checkpoint_state_path
+        )
+        print(
+            f"Resuming from checkpoint: {len(initial_harvested)} papers already "
+            f"harvested, resumption_token={'set' if initial_resumption_token else 'none'}"
+        )
+
+    # Only checkpoint full/incremental harvests, not bounded test runs.
+    use_checkpoint = args.max_records is None
+
     harvested_papers = harvest_oai_records(
         base_url=base_url,
         metadata_prefix=metadata_prefix,
@@ -599,7 +703,14 @@ def main():
         max_records=args.max_records,
         sleep_seconds=args.sleep_seconds,
         drop_stats=drop_stats,
+        harvested=initial_harvested,
+        resumption_token=initial_resumption_token,
+        checkpoint_papers_path=checkpoint_papers_path if use_checkpoint else None,
+        checkpoint_state_path=checkpoint_state_path if use_checkpoint else None,
     )
+
+    if use_checkpoint:
+        clear_checkpoint(checkpoint_papers_path, checkpoint_state_path)
 
     print(f"Valid harvested papers this run: {len(harvested_papers)}")
     print(f"Ingestion outcome counts this run: {drop_stats}")

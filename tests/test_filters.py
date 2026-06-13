@@ -1,5 +1,6 @@
 from src.rag_lit.preprocessing import (
     arxiv_id_sort_key,
+    candidate_ids_matching_categories,
     filter_by_candidate_ids,
     reduction_percent,
 )
@@ -68,3 +69,23 @@ def test_arxiv_id_sort_key_old_format_year_rollover():
     # YY >= 91 -> 19YY, YY < 91 -> 20YY (arxiv old-format ids run 1991-2007)
     assert arxiv_id_sort_key("hep-th/9711200")[0] == 1997
     assert arxiv_id_sort_key("math/0211159")[0] == 2002
+
+
+def test_candidate_ids_matching_categories_single():
+    result = candidate_ids_matching_categories(PAPERS, ["stat.TH"])
+    assert result == {"p3"}
+
+
+def test_candidate_ids_matching_categories_cross_listed():
+    result = candidate_ids_matching_categories(PAPERS, ["stat.ML"])
+    assert result == {"p2"}
+
+
+def test_candidate_ids_matching_categories_union_of_multiple():
+    result = candidate_ids_matching_categories(PAPERS, ["cs.AI", "cs.CL"])
+    assert result == {"p1", "p5"}
+
+
+def test_candidate_ids_matching_categories_no_match():
+    result = candidate_ids_matching_categories(PAPERS, ["q-bio.NC"])
+    assert result == set()

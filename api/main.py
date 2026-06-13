@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -55,6 +55,7 @@ class SearchRequest(BaseModel):
     top_k: int = 10
     use_qwen_prefilter: bool = True
     use_claude_justification: bool = True
+    categories: Optional[List[str]] = None
 
 
 @app.on_event("startup")
@@ -109,4 +110,5 @@ async def search(request: Request, body: SearchRequest) -> SearchResponse:
         top_k=body.top_k,
         use_qwen_prefilter=body.use_qwen_prefilter,
         use_claude_justification=body.use_claude_justification,
+        categories=body.categories,
     )
