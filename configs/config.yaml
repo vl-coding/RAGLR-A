@@ -19,7 +19,7 @@ retrieval:
   target_reduction_min_percent: 86
   target_reduction_max_percent: 99
   canonical_papers_path: "data/canonical_papers.yaml"
-  bm25_mmap: false
+  bm25_mmap: true
   near_duplicate_threshold: 0.92
 
 models:
