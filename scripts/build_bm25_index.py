@@ -45,37 +45,51 @@ def main():
     jsonl_path = config["data"]["processed_path"]
     print(f"Streaming papers from {jsonl_path} ...", flush=True)
 
-    all_papers = []
-    for i, (arxiv_id, text) in enumerate(stream_papers(jsonl_path)):
-        all_papers.append((arxiv_id, text))
-        if (i + 1) % 200_000 == 0:
-            print(f"  Read {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
+    arxiv_ids: list = []
+    corpus_tokens: list = []
 
-    # Sort by (year, month, sequence) descending so --max-papers selects the
-    # most recent papers. A plain lexicographic sort on the id string would
-    # put every pre-2007 'category/YYMMNNN' id ahead of every 'YYMM.NNNNN'
-    # id (letters > digits in ASCII), which silently drops ~17 years of
-    # new-format papers from the "most recent N" selection.
-    all_papers.sort(key=lambda x: arxiv_id_sort_key(x[0]), reverse=True)
+    if args.max_papers:
+        # Need the full id list up front to select the N most recent papers,
+        # so this path still pays the two-list cost (raw text + tokens).
+        all_papers = []
+        for i, (arxiv_id, text) in enumerate(stream_papers(jsonl_path)):
+            all_papers.append((arxiv_id, text))
+            if (i + 1) % 200_000 == 0:
+                print(f"  Read {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
 
-    if args.max_papers and args.max_papers < len(all_papers):
-        print(
-            f"Keeping {args.max_papers:,} most recent papers "
-            f"(dropped {len(all_papers) - args.max_papers:,} older papers)",
-            flush=True,
-        )
-        all_papers = all_papers[: args.max_papers]
+        # Sort by (year, month, sequence) descending so --max-papers selects
+        # the most recent papers. A plain lexicographic sort on the id string
+        # would put every pre-2007 'category/YYMMNNN' id ahead of every
+        # 'YYMM.NNNNN' id (letters > digits in ASCII), which silently drops
+        # ~17 years of new-format papers from the "most recent N" selection.
+        all_papers.sort(key=lambda x: arxiv_id_sort_key(x[0]), reverse=True)
 
-    print(f"Tokenizing {len(all_papers):,} papers ...", flush=True)
-    arxiv_ids = []
-    corpus_tokens = []
-    for i, (arxiv_id, text) in enumerate(all_papers):
-        arxiv_ids.append(arxiv_id)
-        corpus_tokens.append(tokenize(text))
-        if (i + 1) % 100_000 == 0:
-            print(f"  Tokenized {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
+        if args.max_papers < len(all_papers):
+            print(
+                f"Keeping {args.max_papers:,} most recent papers "
+                f"(dropped {len(all_papers) - args.max_papers:,} older papers)",
+                flush=True,
+            )
+            all_papers = all_papers[: args.max_papers]
 
-    del all_papers
+        print(f"Tokenizing {len(all_papers):,} papers ...", flush=True)
+        for i, (arxiv_id, text) in enumerate(all_papers):
+            arxiv_ids.append(arxiv_id)
+            corpus_tokens.append([sys.intern(tok) for tok in tokenize(text)])
+            if (i + 1) % 100_000 == 0:
+                print(f"  Tokenized {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
+        del all_papers
+    else:
+        # Full corpus: tokenize while streaming so we never hold both the raw
+        # text and the tokenized corpus in memory at the same time. Interning
+        # tokens dedupes the (highly repetitive) vocabulary across documents.
+        print("Tokenizing while streaming (no --max-papers) ...", flush=True)
+        for i, (arxiv_id, text) in enumerate(stream_papers(jsonl_path)):
+            arxiv_ids.append(arxiv_id)
+            corpus_tokens.append([sys.intern(tok) for tok in tokenize(text)])
+            if (i + 1) % 200_000 == 0:
+                print(f"  Tokenized {i+1:,} papers ({time.time()-t0:.0f}s)", flush=True)
+
     print(f"Loaded {len(arxiv_ids):,} papers in {time.time()-t0:.1f}s", flush=True)
 
     print("Building BM25 index ...", flush=True)
