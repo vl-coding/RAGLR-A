@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+> **New to this project, or not a software engineer?** Start with **[FOR_RESEARCHERS.md](FOR_RESEARCHERS.md)** — a plain-language guide to what this does, when to use it, and how to read the results.
+
 A domain-general arXiv retrieval system built to explore multi-stage RAG pipelines for academic literature search. RAGLR-A combines sparse and dense retrieval with LLM-powered query expansion and relevance justification to surface relevant papers from across the full arXiv taxonomy (3M+ papers).
 
 ---
@@ -53,6 +55,18 @@ Every response also includes a `RetrievalTrace`: search-space reduction stats, l
 ## Corpus coverage
 
 The harvested corpus spans the full arXiv taxonomy: Computer Science · Mathematics · Physics · Astrophysics · Condensed Matter · High Energy Physics · Nuclear Physics · Nonlinear Sciences · Statistics · Quantitative Biology · Quantitative Finance · Economics · Electrical Engineering and Systems Science · Other Physics
+
+---
+
+## Who is this for?
+
+RAGLR-A is built as a domain-general retrieval pipeline — the arXiv corpus and gold query set used here are one configuration, not a hard constraint. The same architecture (keyword prefilter → HyDE → dual retrieval → RRF fusion → LLM justification) generalizes to other document collections and topic areas:
+
+- **Researchers** can use it as-is to get a fast, explained shortlist of arXiv papers for a research question — a starting point for a literature search, not a replacement for one (see [FOR_RESEARCHERS.md](FOR_RESEARCHERS.md)).
+- **Organizations** with their own internal or licensed document collections (reports, technical docs, prior studies) could swap the arXiv harvester for their own corpus and reuse the retrieval/justification pipeline to help staff find relevant internal material by topic rather than exact keywords.
+- **Research-focused nonprofits** could adapt the pipeline to surface relevant literature on a specific policy area, conservation topic, or education intervention for program staff doing evidence-based work — e.g., pointing a version of this at open-access policy/health/education research instead of arXiv, with a gold query set tailored to the organization's focus areas.
+
+Adapting it to a new corpus mainly means replacing the harvester (`scripts/update_arxiv_data.py`) and re-running the indexing pipeline (`scripts/orchestrate_indexing.py`) against the new document set; the retrieval, fusion, and justification stages are corpus-agnostic.
 
 ---
 
