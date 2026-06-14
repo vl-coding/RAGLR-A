@@ -1,0 +1,3 @@
+Write a 3–5 sentence hypothetical academic abstract that a paper answering this query would have. Use technical academic language. No citations, authors, or bullet points.
+---
+Query: {query}

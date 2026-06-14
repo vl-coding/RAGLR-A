@@ -45,9 +45,3 @@ build/
 venv/
 env/
 
-# ---------------------------------------------------------------
-# Proprietary — not for public viewing
-# ---------------------------------------------------------------
-prompts/
-docs/payment_system.md
-docs/setup.md

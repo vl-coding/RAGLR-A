@@ -1,0 +1,18 @@
+Extract up to {max_keywords} specific academic search keywords or phrases from the query below.
+
+Rules:
+- Prefer multi-word technical phrases (named methods, model/architecture names, techniques, application domains) over single words.
+- Avoid generic single words like "model", "method", "learning", "network", "approach", "system", "analysis", "algorithm", "data", "framework", "technique", "deep", "based" -- only use them as part of a more specific multi-word phrase.
+- Make each keyword cover a distinct aspect of the query. Do not repeat near-duplicate phrases.
+
+Return only a JSON list of strings. Do not include explanations.
+
+Example:
+Query:
+deep learning methods for object detection in images
+
+Output:
+["object detection", "convolutional neural networks", "region proposal networks", "image classification", "feature extraction"]
+
+Query:
+{query}
