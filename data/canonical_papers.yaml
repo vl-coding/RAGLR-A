@@ -253,3 +253,356 @@
     - "coca"
     - "contrastive captioner"
     - "vision-language pretraining"
+
+# --- Added for issue #1's 12 additional CS/ML gold queries ---
+
+- arxiv_id: "1706.03741"
+  title: "Deep Reinforcement Learning from Human Preferences"
+  topics:
+    - "reinforcement learning from human feedback"
+    - "rlhf"
+    - "human preferences"
+    - "language model alignment"
+
+- arxiv_id: "1707.06347"
+  title: "Proximal Policy Optimization Algorithms (PPO)"
+  topics:
+    - "proximal policy optimization"
+    - "ppo"
+    - "reinforcement learning from human feedback"
+
+- arxiv_id: "2203.02155"
+  title: "InstructGPT"
+  topics:
+    - "instructgpt"
+    - "language model alignment"
+    - "reinforcement learning from human feedback"
+    - "rlhf"
+
+- arxiv_id: "2305.18290"
+  title: "Direct Preference Optimization (DPO)"
+  topics:
+    - "direct preference optimization"
+    - "dpo"
+    - "language model alignment"
+    - "rlhf"
+
+- arxiv_id: "1406.2661"
+  title: "Generative Adversarial Networks (Goodfellow et al.)"
+  topics:
+    - "generative adversarial network"
+    - "gan"
+    - "image synthesis"
+
+- arxiv_id: "1511.06434"
+  title: "DCGAN"
+  topics:
+    - "dcgan"
+    - "deep convolutional generative adversarial network"
+    - "generative adversarial network"
+    - "image synthesis"
+
+- arxiv_id: "1701.07875"
+  title: "Wasserstein GAN"
+  topics:
+    - "wasserstein gan"
+    - "generative adversarial network"
+    - "image synthesis"
+
+- arxiv_id: "1812.04948"
+  title: "StyleGAN"
+  topics:
+    - "stylegan"
+    - "style-based generator"
+    - "generative adversarial network"
+    - "image synthesis"
+
+- arxiv_id: "1301.3781"
+  title: "Efficient Estimation of Word Representations in Vector Space (word2vec)"
+  topics:
+    - "word2vec"
+    - "word embeddings"
+    - "distributed representations"
+
+- arxiv_id: "1310.4546"
+  title: "Distributed Representations of Words and Phrases and their Compositionality"
+  topics:
+    - "distributed representations"
+    - "word embeddings"
+    - "skip-gram"
+    - "word2vec"
+
+- arxiv_id: "1607.04606"
+  title: "Enriching Word Vectors with Subword Information (fastText)"
+  topics:
+    - "fasttext"
+    - "word embeddings"
+    - "subword information"
+    - "distributed representations"
+
+- arxiv_id: "1802.05365"
+  title: "Deep Contextualized Word Representations (ELMo)"
+  topics:
+    - "elmo"
+    - "contextualized word representations"
+    - "word embeddings"
+
+- arxiv_id: "1409.3215"
+  title: "Sequence to Sequence Learning with Neural Networks"
+  topics:
+    - "sequence to sequence learning"
+    - "sequence-to-sequence learning"
+    - "neural machine translation"
+
+- arxiv_id: "1409.0473"
+  title: "Neural Machine Translation by Jointly Learning to Align and Translate"
+  topics:
+    - "neural machine translation"
+    - "attention mechanism"
+    - "align and translate"
+
+- arxiv_id: "1508.04025"
+  title: "Effective Approaches to Attention-based Neural Machine Translation"
+  topics:
+    - "attention-based neural machine translation"
+    - "neural machine translation"
+    - "attention mechanism"
+
+- arxiv_id: "1609.08144"
+  title: "Google's Neural Machine Translation System (GNMT)"
+  topics:
+    - "google's neural machine translation"
+    - "neural machine translation"
+    - "sequence-to-sequence learning"
+
+- arxiv_id: "1412.6980"
+  title: "Adam: A Method for Stochastic Optimization"
+  topics:
+    - "adam optimizer"
+    - "adaptive gradient-based optimization"
+    - "stochastic optimization"
+
+- arxiv_id: "1212.5701"
+  title: "ADADELTA: An Adaptive Learning Rate Method"
+  topics:
+    - "adadelta"
+    - "adaptive learning rate"
+    - "adaptive gradient-based optimization"
+
+- arxiv_id: "1711.05101"
+  title: "Decoupled Weight Decay Regularization (AdamW)"
+  topics:
+    - "adamw"
+    - "weight decay regularization"
+    - "adam optimizer"
+    - "adaptive gradient-based optimization"
+
+- arxiv_id: "1904.09237"
+  title: "On the Convergence of Adam and Beyond (AMSGrad)"
+  topics:
+    - "amsgrad"
+    - "convergence of adam"
+    - "adaptive gradient-based optimization"
+
+- arxiv_id: "1611.01578"
+  title: "Neural Architecture Search with Reinforcement Learning"
+  topics:
+    - "neural architecture search"
+    - "reinforcement learning"
+    - "convolutional networks"
+
+- arxiv_id: "1806.09055"
+  title: "DARTS: Differentiable Architecture Search"
+  topics:
+    - "darts"
+    - "differentiable architecture search"
+    - "neural architecture search"
+
+- arxiv_id: "1905.11946"
+  title: "EfficientNet: Rethinking Model Scaling for CNNs"
+  topics:
+    - "efficientnet"
+    - "model scaling"
+    - "efficient convolutional networks"
+    - "neural architecture search"
+
+- arxiv_id: "1704.04861"
+  title: "MobileNets: Efficient CNNs for Mobile Vision Applications"
+  topics:
+    - "mobilenets"
+    - "efficient convolutional networks"
+    - "mobile vision applications"
+
+- arxiv_id: "1506.01497"
+  title: "Faster R-CNN"
+  topics:
+    - "faster r-cnn"
+    - "object detection"
+    - "region proposal network"
+
+- arxiv_id: "1506.02640"
+  title: "You Only Look Once (YOLO)"
+  topics:
+    - "yolo"
+    - "you only look once"
+    - "object detection"
+
+- arxiv_id: "1512.02325"
+  title: "SSD: Single Shot MultiBox Detector"
+  topics:
+    - "ssd"
+    - "single shot multibox detector"
+    - "object detection"
+
+- arxiv_id: "1703.06870"
+  title: "Mask R-CNN"
+  topics:
+    - "mask r-cnn"
+    - "object detection"
+    - "instance segmentation"
+
+- arxiv_id: "1503.02531"
+  title: "Distilling the Knowledge in a Neural Network"
+  topics:
+    - "knowledge distillation"
+    - "distilling the knowledge"
+    - "compressing neural network models"
+
+- arxiv_id: "1910.01108"
+  title: "DistilBERT"
+  topics:
+    - "distilbert"
+    - "knowledge distillation"
+    - "compressing neural network models"
+
+- arxiv_id: "1909.10351"
+  title: "TinyBERT"
+  topics:
+    - "tinybert"
+    - "knowledge distillation"
+    - "compressing neural network models"
+
+- arxiv_id: "1606.07947"
+  title: "Sequence-Level Knowledge Distillation"
+  topics:
+    - "sequence-level knowledge distillation"
+    - "knowledge distillation"
+    - "compressing neural network models"
+
+- arxiv_id: "1602.05629"
+  title: "Communication-Efficient Learning of Deep Networks from Decentralized Data (FedAvg)"
+  topics:
+    - "fedavg"
+    - "federated learning"
+    - "decentralized data"
+    - "communication-efficient learning"
+
+- arxiv_id: "1812.06127"
+  title: "Federated Optimization in Heterogeneous Networks (FedProx)"
+  topics:
+    - "fedprox"
+    - "federated optimization"
+    - "federated learning"
+    - "heterogeneous networks"
+
+- arxiv_id: "1908.07873"
+  title: "Federated Learning: Challenges, Methods, and Future Directions"
+  topics:
+    - "federated learning"
+    - "decentralized data"
+
+- arxiv_id: "1912.04977"
+  title: "Advances and Open Problems in Federated Learning"
+  topics:
+    - "federated learning"
+    - "decentralized data"
+    - "open problems"
+
+- arxiv_id: "1502.03167"
+  title: "Batch Normalization"
+  topics:
+    - "batch normalization"
+    - "normalization techniques"
+    - "training deep neural networks"
+
+- arxiv_id: "1607.06450"
+  title: "Layer Normalization"
+  topics:
+    - "layer normalization"
+    - "normalization techniques"
+    - "training deep neural networks"
+
+- arxiv_id: "1607.08022"
+  title: "Instance Normalization"
+  topics:
+    - "instance normalization"
+    - "normalization techniques"
+    - "training deep neural networks"
+
+- arxiv_id: "1803.08494"
+  title: "Group Normalization"
+  topics:
+    - "group normalization"
+    - "normalization techniques"
+    - "training deep neural networks"
+
+- arxiv_id: "1312.6114"
+  title: "Auto-Encoding Variational Bayes (VAE)"
+  topics:
+    - "variational autoencoder"
+    - "auto-encoding variational bayes"
+    - "generative modeling"
+
+- arxiv_id: "1401.4082"
+  title: "Stochastic Backpropagation and Approximate Inference in Deep Generative Models"
+  topics:
+    - "stochastic backpropagation"
+    - "deep generative models"
+    - "variational autoencoder"
+    - "generative modeling"
+
+- arxiv_id: "1509.00519"
+  title: "Importance Weighted Autoencoders (IWAE)"
+  topics:
+    - "importance weighted autoencoder"
+    - "iwae"
+    - "variational autoencoder"
+    - "generative modeling"
+
+- arxiv_id: "1711.00937"
+  title: "Neural Discrete Representation Learning (VQ-VAE)"
+  topics:
+    - "vq-vae"
+    - "vector quantized variational autoencoder"
+    - "variational autoencoder"
+    - "generative modeling"
+
+- arxiv_id: "1701.06538"
+  title: "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer"
+  topics:
+    - "sparsely-gated mixture-of-experts"
+    - "mixture-of-experts"
+    - "scaling neural networks"
+
+- arxiv_id: "2006.16668"
+  title: "GShard"
+  topics:
+    - "gshard"
+    - "mixture-of-experts"
+    - "scaling neural networks"
+
+- arxiv_id: "2101.03961"
+  title: "Switch Transformers"
+  topics:
+    - "switch transformers"
+    - "sparse mixture-of-experts"
+    - "mixture-of-experts"
+    - "scaling neural networks"
+
+- arxiv_id: "2202.08906"
+  title: "ST-MoE: Designing Stable and Transferable Sparse Expert Models"
+  topics:
+    - "st-moe"
+    - "sparse expert models"
+    - "mixture-of-experts"
+    - "scaling neural networks"
