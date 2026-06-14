@@ -3,6 +3,7 @@ Smoke tests for the pipeline using lightweight mocks.
 
 Verifies pipeline wiring without requiring real models, API keys, or built indexes.
 """
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -125,6 +126,19 @@ def _build_mock_pipeline(encode_side_effect=None) -> RagLiteraturePipeline:
     mock_kw_conn = MagicMock()
     mock_kw_conn.execute.return_value.fetchone.return_value = None
 
+    # Real in-memory connection so the real candidate_ids_for_categories
+    # (called during run(), after the patches below are torn down) has
+    # actual paper_categories data to query.
+    metadata_conn = sqlite3.connect(":memory:")
+    metadata_conn.execute(
+        "CREATE TABLE paper_categories (arxiv_id TEXT NOT NULL, category TEXT NOT NULL)"
+    )
+    metadata_conn.executemany(
+        "INSERT INTO paper_categories (arxiv_id, category) VALUES (?, ?)",
+        [(p.arxiv_id, category) for p in SAMPLE_PAPERS for category in p.categories],
+    )
+    metadata_conn.commit()
+
     with (
         patch.object(
             RagLiteraturePipeline,
@@ -133,6 +147,7 @@ def _build_mock_pipeline(encode_side_effect=None) -> RagLiteraturePipeline:
         ),
         patch.object(RagLiteraturePipeline, "_load_delta_meta_from"),
         patch("src.rag_lit.pipeline.open_keyword_index_db", return_value=mock_kw_conn),
+        patch("src.rag_lit.pipeline.open_metadata_db", return_value=metadata_conn),
         patch("src.rag_lit.pipeline.QwenKeywordExtractor", return_value=mock_qwen),
         patch("src.rag_lit.pipeline.ClaudeHyDE", return_value=mock_hyde),
         patch("src.rag_lit.pipeline.ClaudeJustifier", return_value=mock_justifier),

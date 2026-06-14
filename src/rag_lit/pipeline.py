@@ -14,7 +14,13 @@ from .preprocessing import (
 from .canonical_boost import load_canonical_papers, match_canonical_papers
 from .dedup import find_near_duplicates, DEFAULT_NEAR_DUPLICATE_THRESHOLD
 from .keyword_index import open_keyword_index_db, candidate_ids_from_keywords
-from .metadata_db import build_metadata_db, load_metadata_db
+from .metadata_db import (
+    build_metadata_db,
+    candidate_ids_for_categories,
+    load_metadata_db,
+    metadata_db_has_category_table,
+    open_metadata_db,
+)
 from .qwen_prefilter import QwenKeywordExtractor
 from .hyde import ClaudeHyDE
 from .bm25_retriever import BM25Retriever
@@ -57,8 +63,14 @@ class RagLiteraturePipeline:
         self._all_meta, self._main_offsets = self._build_meta_index(
             self._jsonl_path, self._metadata_db_path
         )
+        # Cache the full corpus id set once (issue #5 phase 2) instead of
+        # rebuilding a ~3M-entry set from _all_meta on every query.
+        self._all_ids: Set[str] = {paper.arxiv_id for paper in self._all_meta}
+        self._metadata_conn = open_metadata_db(self._metadata_db_path)
+
         self._delta_offsets: Dict[str, int] = {}
         self._delta_ids: Set[str] = set()
+        self._delta_meta: List[_PaperMeta] = []
         self._delta_read_pos: int = 0  # bytes consumed from delta JSONL so far
 
         if self._delta_jsonl_path and Path(self._delta_jsonl_path).exists():
@@ -129,11 +141,15 @@ class RagLiteraturePipeline:
         """
         db_file = Path(db_path)
         jsonl_mtime = Path(jsonl_path).stat().st_mtime
-        if not db_file.exists() or db_file.stat().st_mtime < jsonl_mtime:
+        if (
+            not db_file.exists()
+            or db_file.stat().st_mtime < jsonl_mtime
+            or not metadata_db_has_category_table(db_path)
+        ):
             print(
-                f"Metadata DB at {db_path} is missing or stale -- rebuilding "
-                f"from {jsonl_path} (one-time cost; future sessions load "
-                f"this DB directly).",
+                f"Metadata DB at {db_path} is missing, stale, or predates the "
+                f"paper_categories table -- rebuilding from {jsonl_path} "
+                f"(one-time cost; future sessions load this DB directly).",
                 flush=True,
             )
             build_metadata_db(jsonl_path, db_path)
@@ -162,7 +178,10 @@ class RagLiteraturePipeline:
                 arxiv_id = obj.get("arxiv_id", "")
                 if not arxiv_id or arxiv_id in self._delta_offsets:
                     continue
-                self._all_meta.append(_PaperMeta(arxiv_id, tuple(obj.get("categories", []))))
+                meta = _PaperMeta(arxiv_id, tuple(obj.get("categories", [])))
+                self._all_meta.append(meta)
+                self._delta_meta.append(meta)
+                self._all_ids.add(arxiv_id)
                 self._delta_offsets[arxiv_id] = offset
                 self._delta_ids.add(arxiv_id)
             self._delta_read_pos = f.tell()
@@ -244,7 +263,7 @@ class RagLiteraturePipeline:
 
         start_total = time.time()
         total_corpus_size = len(self._all_meta)
-        all_ids = {paper.arxiv_id for paper in self._all_meta}
+        all_ids = self._all_ids
 
         generated_keywords = []
         keyword_candidate_ids = None
@@ -274,7 +293,15 @@ class RagLiteraturePipeline:
 
         canonical_corpus_ids = all_ids
         if categories:
-            category_ids = candidate_ids_matching_categories(self._all_meta, categories)
+            # Main corpus is filtered via the indexed paper_categories table
+            # (issue #5 phase 2) rather than scanning all of _all_meta; the
+            # small set of delta-only papers (not yet in metadata.sqlite3)
+            # is checked separately in-memory.
+            category_ids = candidate_ids_for_categories(self._metadata_conn, categories)
+            if self._delta_meta:
+                category_ids = category_ids | candidate_ids_matching_categories(
+                    self._delta_meta, categories
+                )
             final_candidate_ids = final_candidate_ids & category_ids
             canonical_corpus_ids = category_ids
 

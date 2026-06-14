@@ -80,6 +80,8 @@ Qwen2.5-0.5B-Instruct runs in float16 on GPU or float32 on CPU. On CPU, keyword 
 **Memory**
 `retrieval.bm25_mmap: true` (the default, issue #5) memory-maps the BM25 index's CSC arrays (`bm25s.BM25.load(..., mmap=True)`) instead of loading the full index into RAM at pipeline startup — for a corpus of several million papers, loading fully into RAM can use several GB. With mmap, each query pages in only the score-array slices for its own tokens, and the OS page cache keeps hot tokens resident across queries, similar to how the keyword index (SQLite-backed, point lookups) already behaves. This trades a small amount of per-query I/O latency (mostly on cold pages) for a much smaller resident set, and requires no index rebuild — only `BM25Retriever.load()`'s `mmap` argument changes. Set `retrieval.bm25_mmap: false` to revert to the fully-in-RAM behavior. The delta BM25 index (`bm25_delta`) is small and always loaded fully into RAM regardless of this setting.
 
+Issue #5 phase 2: the per-query `all_ids = {paper.arxiv_id for paper in self._all_meta}` set (~3.07M entries, previously rebuilt on every query) is now cached once at startup as `self._all_ids` and updated incrementally as delta papers are loaded. Category filtering (`categories=[...]`) for the main corpus now runs as an indexed `SELECT DISTINCT arxiv_id FROM paper_categories WHERE category IN (...)` against `metadata.sqlite3` (new `paper_categories(arxiv_id, category)` table + index, built by `build_metadata_db`) instead of a full Python scan of `_all_meta`; only the small set of delta-only papers (not yet in `metadata.sqlite3`) is still checked in-memory. Existing `metadata.sqlite3` files predating this table are detected and rebuilt automatically on next startup.
+
 ---
 
 ## Scope
