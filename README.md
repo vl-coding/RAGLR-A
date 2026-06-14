@@ -99,6 +99,7 @@ RAGLR-A/
 │   ├── raw/                Raw OAI-PMH snapshot (gitignored)
 │   └── processed/          Cleaned paper JSONL (gitignored)
 ├── docs/
+│   ├── ENGINEERING_BREAKDOWN.md  Map of how the system is engineered
 │   ├── SYSTEM_DESIGN.md    Pipeline architecture and data model
 │   ├── DATA_CARD.md        Data source, schema, and provenance
 │   ├── EVALUATION.md       Retrieval evaluation methodology and results
