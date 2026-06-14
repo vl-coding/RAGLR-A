@@ -10,11 +10,9 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 A short screen recording of a live query (including the academic field / arXiv subcategory filter from issue #10) is on [YouTube](https://youtu.be/kC1A5SCq2cs).
 
-This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model for keyword extraction. On CPU, a single query takes roughly **1-2 minutes end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification — see [Limitations](#limitations) for why the dense-retrieval step can dominate this). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
+**This project isn't hosted as a live demo — that's a deliberate trade-off, not a limitation of the system.** The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model. Keeping that footprint warm for occasional traffic isn't worth it for a portfolio project, and a real query still takes **1-2 minutes end to end** on CPU (see [Limitations](#limitations)) — closer to a genuine literature-search workload than a snappy hosted demo would suggest.
 
-If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — the recording above walks through a query end-to-end.
-
-Otherwise, this README documents the architecture and how to run it locally — see [Running it yourself](#running-it-yourself) below.
+If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — the recording above walks through a query end-to-end. Otherwise, see [Running it yourself](#running-it-yourself) below.
 
 ---
 
