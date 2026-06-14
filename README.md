@@ -8,17 +8,13 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 ![Streamlit UI showing search results with category filter and relevance justifications](docs/media/03_results.png)
 
-A short screen recording of a live query (including the "Limit to arXiv categories" filter from issue #10) is at [docs/media/streamlit_demo.webm](docs/media/streamlit_demo.webm).
+A short screen recording of a live query (including the academic field / arXiv subcategory filter from issue #10) is at [docs/media/streamlit_demo.webm](docs/media/streamlit_demo.webm).
 
 This project is **not hosted as a live demo**. The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model for keyword extraction. On CPU, a single query takes roughly **1-2 minutes end to end** (keyword extraction + HyDE generation + dual retrieval + per-result relevance justification — see [Limitations](#limitations) for why the dense-retrieval step can dominate this). That's not a great experience for a "click a link from a resume" demo, and keeping 40GB of indexes warm on a hosted instance isn't practical for an occasional-traffic portfolio project.
 
-If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — watch the video walkthrough instead:
+If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — the recording above walks through a query end-to-end.
 
-[![Watch the demo video](https://img.youtube.com/vi/-YcnMkPnDR4/hqdefault.jpg)](https://youtu.be/-YcnMkPnDR4)
-
-Click the thumbnail above for a ~2 minute walkthrough of a query running end-to-end.
-
-Instead, this README documents the architecture and how to run it locally — see [Running it yourself](#running-it-yourself) below.
+Otherwise, this README documents the architecture and how to run it locally — see [Running it yourself](#running-it-yourself) below.
 
 ---
 
@@ -35,7 +31,7 @@ Each query flows through the following stages:
 Every response also includes a `RetrievalTrace`: search-space reduction stats, latency breakdowns, and the keywords generated along the way.
 
 ### Interfaces
-- **Streamlit UI** — query input, progress tracking, optional arXiv category filtering, and results display
+- **Streamlit UI** — query input, progress tracking, optional academic field / arXiv subcategory filtering, and results display
 - **FastAPI REST server** — `/search` endpoint with interactive docs
 - **CLI runner** — `scripts/run_query.py` for quick ad-hoc queries
 
@@ -189,9 +185,7 @@ This builds the artifacts in `artifacts/`:
 streamlit run app/streamlit_app.py
 ```
 
-Enter a research question and click **Find Papers**.
-
-> **Performance note:** with the full 3M-paper corpus on CPU, expect roughly **1 minute per query** (local Qwen keyword extraction + Claude HyDE + dual retrieval + per-result justification). A smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds, since most of the latency comes from running the local Qwen model and per-result Claude calls over a large candidate set.
+Enter a research question and click **Find Papers**. On the full 3M-paper corpus, expect roughly 1-2 minutes per query (see [Demo](#demo) above); a smaller corpus (e.g. the 1,000-paper test harvest) returns in seconds.
 
 #### FastAPI server
 

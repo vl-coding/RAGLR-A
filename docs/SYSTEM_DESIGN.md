@@ -66,7 +66,9 @@ User query
 
 `QwenKeywordExtractor` loads `Qwen/Qwen2.5-0.5B-Instruct` locally and prompts it (`prompts/qwen_keywords_v1.txt`) to return a JSON list of ≤18 academic keywords for the query, favoring multi-word technical phrases over generic single words. Generation uses a `_JSONArrayStoppingCriteria` that stops as soon as the first JSON array's brackets balance (rather than always running to `max_new_tokens=160`), reducing typical CPU latency. The extracted (or raw-query-fallback) list is post-filtered by `_filter_keywords`, which drops generic single-word keywords (stoplist of terms like "model", "method", "learning") and dedupes case/plural near-duplicates while preserving multi-word phrases. Each remaining keyword is tokenized and looked up in a prebuilt inverted index stored in SQLite (`keyword_index.sqlite3`). The union of matching paper IDs is intersected with the full corpus. If the result is smaller than `min_prefilter_candidates` (default 500), the keyword filter is skipped and the full corpus is used.
 
-The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs, stored as a `token -> comma-separated arxiv_ids` table. It is built at index time from paper titles and abstracts (`build_keyword_inverted_index` / `save_keyword_index_db` in `keyword_index.py`).
+The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs, stored as a `token -> comma-separated arxiv_ids` table in `keyword_index.sqlite3`. It is built at index time from paper titles and abstracts (`keyword_index.py`).
+
+An optional `categories` filter (issue #10) intersects the candidate set with papers cross-listed in any of the requested arXiv subcategories, via `candidate_ids_matching_categories` in `preprocessing.py`. The Streamlit UI exposes this as an "Academic fields" / "arXiv subcategories" filter pair backed by `configs/arxiv_taxonomy.yaml`.
 
 ### 2. Claude HyDE (`hyde.py`)
 

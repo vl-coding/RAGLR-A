@@ -60,12 +60,52 @@ with st.sidebar:
     use_qwen = st.checkbox("Qwen keyword prefilter", value=True)
     use_justification = st.checkbox("Claude justifications", value=True)
 
+    field_options = {d["label"]: k for k, d in config["academic_fields"].items()}
+    category_labels = config.get("category_labels", {})
     category_options = _load_category_options()
-    selected_categories = st.multiselect(
-        "Limit to arXiv categories (optional)",
-        options=category_options,
-        help="Only return papers tagged with at least one of the selected categories.",
+
+    category_to_field_label = {
+        cat: field_data["label"]
+        for field_data in config["academic_fields"].values()
+        if isinstance(field_data.get("categories"), list)
+        for cat in field_data["categories"]
+    }
+
+    if "academic_fields_select" not in st.session_state:
+        st.session_state["academic_fields_select"] = []
+    if "subcategory_select" not in st.session_state:
+        st.session_state["subcategory_select"] = []
+
+    def _sync_academic_fields() -> None:
+        selected_cats = st.session_state["subcategory_select"]
+        needed_labels = {
+            category_to_field_label[c] for c in selected_cats if c in category_to_field_label
+        }
+        updated = set(st.session_state["academic_fields_select"]) | needed_labels
+        st.session_state["academic_fields_select"] = list(updated)
+
+    selected_labels = st.multiselect(
+        "Academic fields (optional)",
+        options=list(field_options.keys()),
+        key="academic_fields_select",
     )
+    selected_fields = [field_options[label] for label in selected_labels]
+
+    selected_subcategories = st.multiselect(
+        "Restrict to specific arXiv subcategories (optional)",
+        options=category_options,
+        format_func=lambda code: f"{category_labels.get(code, code)} ({code})",
+        key="subcategory_select",
+        on_change=_sync_academic_fields,
+    )
+
+    field_category_codes = {
+        cat
+        for field_key in selected_fields
+        for cat in config["academic_fields"][field_key].get("categories", [])
+        if isinstance(config["academic_fields"][field_key].get("categories"), list)
+    }
+    selected_categories = sorted(field_category_codes | set(selected_subcategories))
 
     st.markdown(f"**This demo returns the top {top_k} papers per query.**")
 

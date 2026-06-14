@@ -36,6 +36,7 @@ demo:
   limit_message: "Free demo limit reached — {limit} queries per hour. Full access coming soon."
 
 paths:
+  taxonomy: "configs/arxiv_taxonomy.yaml"
   dense_index_dir: "artifacts/dense_index"
   bm25_index: "artifacts/bm25_index"
   bm25_delta: "artifacts/bm25_delta"
