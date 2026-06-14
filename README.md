@@ -61,8 +61,8 @@ RAGLR-A is evaluated against a 14-query gold set (8 CS/ML + 2 biology + 2 math +
 | Metric | Result |
 |---|---|
 | Prefilter recall (keyword filter never drops a known-relevant paper) | 1.000 |
-| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.086 / 0.214 / 0.197 / 0.345 |
-| Justifier decoy-discrimination gap (top-k vs. random papers) | 8.07 / 10 |
+| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.150 / 0.375 / 0.341 / 0.552 |
+| Justifier decoy-discrimination gap (top-k vs. random papers) | 7.91 / 10 |
 
 See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the gold query set, HyDE-vs-raw-query ablation results, and per-query breakdowns.
 
