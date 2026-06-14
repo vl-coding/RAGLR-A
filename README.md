@@ -1,4 +1,4 @@
-# RAGLR-A — RAG Literature Review Assistant (Demo)
+# RAGLR-A — RAG Literature Review Assistant
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -10,11 +10,9 @@ A domain-general arXiv retrieval system built to explore multi-stage RAG pipelin
 
 ![Streamlit UI showing search results with category filter and relevance justifications](docs/media/03_results.png)
 
-A short screen recording of a live query (including the academic field / arXiv subcategory filter from issue #10) is on [YouTube](https://youtu.be/kC1A5SCq2cs).
+A short screen recording of a live query (including the academic field / arXiv subcategory filter) is on [YouTube](https://youtu.be/kC1A5SCq2cs).
 
-**This project isn't hosted as a live demo — that's a deliberate trade-off, not a limitation of the system.** The corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model. Keeping that footprint warm for occasional traffic isn't worth it for a portfolio project, and a real query still takes **1-2 minutes end to end** on CPU (see [Limitations](#limitations)) — closer to a genuine literature-search workload than a snappy hosted demo would suggest.
-
-If you don't want to run and build the indexes yourself — building the full dense index alone can take **overnight** (~24-28 hours on CPU, see [Build indexes](#4-build-indexes)) — the recording above walks through a query end-to-end. Otherwise, see [Running it yourself](#running-it-yourself) below.
+This project isn't hosted as a live demo — the corpus is 3M+ arXiv papers backed by ~40GB of dense (ChromaDB), BM25, and keyword indexes, plus a locally-run Qwen2.5-0.5B model. Keeping that footprint warm for occasional traffic isn't worth it for a portfolio project, and a real query takes **1-2 minutes end to end** on CPU (see [Limitations](#limitations)). Building the indexes yourself takes **overnight** (~24-28 hours on CPU for the full dense index — see [Build indexes](#4-build-indexes)); see [Running it yourself](#running-it-yourself) below.
 
 ---
 
@@ -101,7 +99,11 @@ RAGLR-A/
 │   ├── raw/                Raw OAI-PMH snapshot (gitignored)
 │   └── processed/          Cleaned paper JSONL (gitignored)
 ├── docs/
-│   └── EVALUATION.md       Retrieval evaluation methodology and results
+│   ├── SYSTEM_DESIGN.md    Pipeline architecture and data model
+│   ├── DATA_CARD.md        Data source, schema, and provenance
+│   ├── EVALUATION.md       Retrieval evaluation methodology and results
+│   ├── LIMITATIONS.md      Known limitations and design trade-offs
+│   └── setup.md            Deployment guide (production setup, scheduler)
 ├── prompts/                Versioned prompt templates
 ├── scripts/
 │   ├── update_arxiv_data.py     Harvest arXiv via OAI-PMH
@@ -134,6 +136,8 @@ RAGLR-A/
 ---
 
 ## Running it yourself
+
+Quickstart below. For production deployment (process management, the incremental-update scheduler, log layout), see **[docs/setup.md](docs/setup.md)**.
 
 ### 1. Install dependencies
 

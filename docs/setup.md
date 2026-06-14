@@ -280,7 +280,7 @@ python scripts/merge_recovered_papers.py   # or write a merge_delta.py equivalen
 python scripts/build_bm25_index.py
 python scripts/build_keyword_index.py
 # 4. Clear the delta
-del data\processed\arxiv_delta.pkl        # Windows
+del data\processed\arxiv_delta.jsonl      # Windows
 # rm data/processed/arxiv_delta.jsonl    # Linux
 # 5. Restart the scheduler
 python scripts/run_scheduler.py

@@ -68,7 +68,7 @@ User query
 
 The inverted index maps lowercase tokens (≥3 characters, alphanumeric+hyphen) to sets of arXiv IDs, stored as a `token -> comma-separated arxiv_ids` table in `keyword_index.sqlite3`. It is built at index time from paper titles and abstracts (`keyword_index.py`).
 
-An optional `categories` filter (issue #10) intersects the candidate set with papers cross-listed in any of the requested arXiv subcategories, via `candidate_ids_matching_categories` in `preprocessing.py`. The Streamlit UI exposes this as an "Academic fields" / "arXiv subcategories" filter pair backed by `configs/arxiv_taxonomy.yaml`.
+An optional `categories` filter intersects the candidate set with papers cross-listed in any of the requested arXiv subcategories, resolved via an indexed `paper_categories` table in `metadata.sqlite3` (`candidate_ids_for_categories` in `metadata_db.py`). The Streamlit UI exposes this as an "Academic fields" / "arXiv subcategories" filter pair backed by `configs/arxiv_taxonomy.yaml`.
 
 ### 2. Claude HyDE (`hyde.py`)
 
