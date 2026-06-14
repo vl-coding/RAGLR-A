@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -8,6 +9,10 @@ from src.rag_lit.pipeline import RagLiteraturePipeline
 
 
 def main():
+    # Avoid UnicodeEncodeError on terminals (e.g. Windows cp1252) when
+    # results contain non-ASCII characters such as accented author names.
+    sys.stdout.reconfigure(encoding="utf-8")
+
     load_dotenv()
 
     parser = argparse.ArgumentParser()

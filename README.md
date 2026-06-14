@@ -1,5 +1,7 @@
 # RAGLR-A — RAG Literature Review Assistant (Demo)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A domain-general arXiv retrieval system built to explore multi-stage RAG pipelines for academic literature search. RAGLR-A combines sparse and dense retrieval with LLM-powered query expansion and relevance justification to surface relevant papers from across the full arXiv taxonomy (3M+ papers).
 
 ---
@@ -222,3 +224,9 @@ pytest tests/test_schemas.py tests/test_rrf.py tests/test_filters.py -v
 # Pipeline smoke tests — uses mocks, no data or API keys required
 pytest tests/test_pipeline_smoke.py -v
 ```
+
+---
+
+## License
+
+[MIT](LICENSE)

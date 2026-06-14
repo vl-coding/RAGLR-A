@@ -13,7 +13,6 @@ torch
 accelerate
 
 anthropic
-google-search-results
 
 pydantic
 streamlit

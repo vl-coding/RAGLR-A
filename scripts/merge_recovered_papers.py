@@ -5,7 +5,8 @@ Merges arxiv_recovered.jsonl into arxiv_papers.jsonl, deduplicates by
 arxiv_id, re-sorts, and writes the combined file.
 
 Run this AFTER build_dense_index_fast.py finishes and BEFORE re-running
-build_dense_index_fast.py (to index the recovered papers) and build_indexes.py.
+build_dense_index_fast.py (to index the recovered papers) and the BM25/keyword
+index builds. If no recovery file is present, this step is a no-op.
 
 Usage:
     python scripts/merge_recovered_papers.py
@@ -29,8 +30,7 @@ def main() -> None:
     recovery_path = str(Path(main_path).parent / "arxiv_recovered.jsonl")
 
     if not Path(recovery_path).exists():
-        print(f"Recovery file not found: {recovery_path}")
-        print("Run recover_missing_papers.py first.")
+        print(f"Recovery file not found: {recovery_path} (nothing to merge, skipping)")
         return
 
     print(f"Loading main JSONL: {main_path}", flush=True)

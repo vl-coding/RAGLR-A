@@ -5,6 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "raglra"
 version = "0.1.0"
+description = "Domain-general arXiv literature search combining BM25, dense retrieval, RRF fusion, and Claude-powered HyDE query expansion and relevance justification."
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]
