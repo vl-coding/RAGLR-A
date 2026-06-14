@@ -10,13 +10,13 @@ The evaluation framework targets three concerns:
 
 RAGLR-A has no external ground-truth test collection, so evaluation runs against a hand-curated **gold query set** (26 queries with known-relevant `arxiv_id`s) plus Claude-as-judge relevance/specificity scoring as a secondary signal. See "Gold query set", "Running evaluation", and "Eval modes & metrics" below for the methodology; "Appendix" for full results and diagnostics.
 
-**Headline numbers** (14-query subset, `--top-k 10`, with canonical-paper boost enabled):
+**Headline numbers** (26-query gold set, `--top-k 10`, with canonical-paper boost enabled):
 
 | Metric | Result |
 |---|---|
-| Prefilter recall (keyword filter never drops a known-relevant paper) | 1.000 |
-| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.150 / 0.375 / 0.341 / 0.552 |
-| Justifier decoy-discrimination gap (top-k vs. random papers) | 7.91 / 10 |
+| Prefilter recall (keyword filter rarely drops a known-relevant paper — see issue #4) | 0.990 |
+| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.154 / 0.385 / 0.375 / 0.599 |
+| Justifier decoy-discrimination gap (top-k vs. random papers) | 8.04 / 10 |
 
 **Issue-driven improvements** (full diagnostics in the linked issues and the Appendix):
 
@@ -25,6 +25,7 @@ RAGLR-A has no external ground-truth test collection, so evaluation runs against
 | Gold query set size/bias | CS/ML queries expanded 8 → 20 to dilute dense-search bias in pooled metrics | [#1](https://github.com/vl-coding/RAGLR-A/issues/1) |
 | HyDE-vs-raw-query eval methodology | 6-item overhaul: rank-delta, pooled judgments, stratification, bootstrap CIs | [#2](https://github.com/vl-coding/RAGLR-A/issues/2) |
 | Canonical-paper boost for zero-hit CS/ML queries | 3/4 zero-hit queries recovered, CS/ML P@10/R@10/NDCG@10/MRR roughly doubled | [#3](https://github.com/vl-coding/RAGLR-A/issues/3) |
+| Canonical-papers registry extended to issue #1's 12 new CS/ML queries | 10/12 newly-covered queries went from 0 hits to nonzero; full 26-query P@10/R@10/NDCG@10/MRR 0.088/0.221/0.207/0.340 → 0.154/0.385/0.375/0.599 | extension of [#3](https://github.com/vl-coding/RAGLR-A/issues/3) |
 | Qwen keyword-extraction quality | Mean candidate-set size 45.8% → 27.4% of corpus, recall 1.000 → 0.990 | [#4](https://github.com/vl-coding/RAGLR-A/issues/4) |
 | Dense retrieval over-fetch & skip-filter | Large-candidate-set queries 3-10x faster, no recall regression | [#11](https://github.com/vl-coding/RAGLR-A/issues/11) |
 | Embedding model benchmark (MiniLM vs. mpnet) | mpnet showed no improvement at ~10x build cost — kept MiniLM | [#12](https://github.com/vl-coding/RAGLR-A/issues/12) |
@@ -46,7 +47,7 @@ RAGLR-A has no external ground-truth test collection, so evaluation runs against
 
 For CS/ML queries, `relevant_ids` are canonical/seminal papers chosen independent of any retrieval method (issue #1 expanded this set from 8 to 20). For bio/math/physics queries, `relevant_ids` are strong topical matches found via dense (SBERT) search over the live corpus — see "Known evaluation gaps" for how this affects the `hyde` ablation.
 
-Most results in the Appendix reflect eval runs against the prior **14-query** set; the prefilter eval has been re-run against the full 26-query set (`outputs/eval_report_prefilter_26q.json`, mean `recall_final_candidates = 1.000`), but `hyde`/`e2e`/`calibration` re-runs against all 26 are still outstanding (see "Known evaluation gaps").
+All four eval modes (`prefilter`, `hyde`, `e2e`, `calibration`) have been run against the full 26-query set (`outputs/eval_report_canonical_extended.json`, after extending `data/canonical_papers.yaml` to cover all 20 CS/ML queries — see "Latest results (26-query gold set)" in the Appendix). Some Appendix subsections below predate this run and still reflect the prior **14-query** set; each is labeled with its scope.
 
 To extend the set, add entries in the same format:
 
@@ -131,13 +132,35 @@ Tracked in [issue #1](https://github.com/vl-coding/RAGLR-A/issues/1) (qrels) and
 
 - **Small qrels per query.** Each query has only 4 `relevant_ids` — a *lower bound* on relevance, since a 3M-paper corpus almost certainly contains other relevant papers not in the gold set. So `recall@10` understates true recall and mostly measures whether the curated IDs specifically surface.
 - **Bio/math/physics qrels are dense-search-sourced**, which favors raw-query dense retrieval for those 6 queries in the `hyde` ablation specifically. The `e2e` and `prefilter` metrics are less affected since they depend on the full fused pipeline. Any HyDE-vs-raw comparison should be read primarily from the CS/ML queries, whose qrels are retrieval-method-independent.
-- **HyDE ablation is underpowered** (n=14 for the existing "Latest results" run; the gold set now has n=26) — the Wilcoxon test cannot reliably detect small or query-dependent effects at this sample size, and bootstrap CIs on small `n` will be wide.
+- **HyDE ablation is underpowered even at n=26** — the Wilcoxon test (post-RRF NDCG@10, p=0.1194) cannot reliably detect small or query-dependent effects at this sample size, and bootstrap CIs remain wide (e.g. post-RRF MRR diff 95% CI = [0.013, 0.368]).
 - **Claude-as-judge relevance/specificity scores** are a secondary signal and inherit whatever bias the judging model has — including for the `--pooled-judgments` NDCG variant, which is judged by the same model.
-- **The `hyde`/`e2e`/`calibration` evals have not yet been re-run** against the full 26-query set (the Appendix results below still reflect the prior 14-query run). A follow-up run with `--evals hyde e2e calibration --rank-delta-top-n 5000 --pooled-judgments` is needed to refresh those numbers.
+- **`--rank-delta-top-n`/`--pooled-judgments` have not yet been re-run** against the full 26-query set — the latest 26-query run (`outputs/eval_report_canonical_extended.json`) used the default flags. A follow-up run with `--rank-delta-top-n 5000 --pooled-judgments` would add per-paper rank-delta and TREC-style pooled NDCG numbers.
 
 ---
 
 ## Appendix: detailed results & diagnostics
+
+### Latest results (26-query gold set, `--top-k 10`, `outputs/eval_report_canonical_extended.json`)
+
+The current full run, after extending `data/canonical_papers.yaml` to cover all 20 CS/ML queries (see "Canonical-papers registry extension" below).
+
+**Prefilter recall**: mean `recall_final_candidates = 0.990` (the one shortfall is the `1406.2661` GAN paper — see issue #4).
+
+**HyDE ablation**:
+
+| Metric | mean(HyDE) | mean(raw query) | mean diff (HyDE − raw) | 95% CI |
+|---|---|---|---|---|
+| Dense-stage NDCG@k | 0.076 | 0.244 | -0.168 | [-0.327, -0.036] |
+| Post-RRF P@10 | 0.154 | 0.131 | 0.023 | [-0.027, 0.065] |
+| Post-RRF R@10 | 0.385 | 0.327 | 0.058 | [-0.067, 0.164] |
+| Post-RRF NDCG@10 | 0.375 | 0.283 | 0.091 | [-0.017, 0.196] |
+| Post-RRF MRR | 0.599 | 0.410 | 0.189 | [0.013, 0.368] |
+
+Dense-stage NDCG@k: wins=4, ties=14, losses=8 (Wilcoxon statistic=15.0, p=0.0593). Post-RRF NDCG@10: Wilcoxon statistic=95.5, p=0.1194. Stratified by `stratum` (dense-stage NDCG@k): `terminology_gap` (n=4) mean diff=0.000 [0.000, 0.000]; `terminology_aligned` (n=22) mean diff=-0.198 [-0.380, -0.039]. As in the 14-query run, the dense-stage numbers favor raw query largely because the 6 bio/math/physics queries' `relevant_ids` are dense-search-sourced (see "Known evaluation gaps"); post-RRF, HyDE comes out ahead on every metric, though none of the differences are significant at n=26.
+
+**End-to-end relevance**: P@10=0.154, R@10=0.385, NDCG@10=0.375, MRR=0.599 (see "Headline numbers" above).
+
+**Justifier score distribution** (n=260 = 26 queries × 10 results): `relevance_score` mean=9.069, stdev=1.060, min=5, max=10; `specificity_score` mean=7.854, stdev=1.560, min=4, max=9. Decoy discrimination mean gap=8.044.
 
 ### Latest results (14-query gold set, `--top-k 10`, `outputs/eval_report_full_14q.json`)
 
@@ -182,6 +205,27 @@ All 6 bio/math/physics queries got at least one hit (recall@10 0.25-0.75) — e.
 Of the 4 originally zero-hit queries, 3 were recovered: "pretrained language models" → BERT/ALBERT/RoBERTa (3/4 hits), "parameter-efficient fine-tuning" → LoRA (1/4, surfaced via canonical RRF contribution), "CLIP-style pretraining" → CLIP (1/4, MRR=1.0 — CLIP already had dense rank 7, just under its cutoff, and the boost pushed it over). "transformer architectures for sequence modeling" remains at 0/4: its `relevant_ids` had essentially no baseline retrieval signal, and even a rank-1 canonical match (~+0.0164 RRF) falls short of that query's rank-10 cutoff (~0.0203). Two queries with partial hits also improved (vision transformers gained 1 hit; diffusion models reached full recall@10).
 
 This is a curated, topic-specific nudge, not a general fix — it only helps the ~32 papers/topics in the registry. Full per-query before/after table: [issue #3](https://github.com/vl-coding/RAGLR-A/issues/3).
+
+### Canonical-papers registry extension to issue #1's 12 new CS/ML queries
+
+`data/canonical_papers.yaml` originally only covered the 8 CS/ML queries present before issue #1 expanded the gold set to 20. The other 12 CS/ML queries (added by issue #1) got no canonical-paper boost at all, and 11/12 scored 0 hits on `e2e` (`outputs/eval_report_recheck.json`). This extension adds 48 entries (4 papers × 12 queries), following the same topic-phrase convention as the original registry.
+
+| Query | P@10 / R@10 before | P@10 / R@10 after | Hits after |
+|---|---|---|---|
+| RLHF for language model alignment | 0.000 / 0.000 | 0.100 / 0.250 | `2203.02155` |
+| GANs for image synthesis | 0.000 / 0.000 | 0.000 / 0.000 | — |
+| Word embeddings / distributed representations | 0.000 / 0.000 | 0.100 / 0.250 | `1301.3781` |
+| Seq2seq + attention for NMT | 0.000 / 0.000 | 0.200 / 0.500 | `1409.0473`, `1409.3215` |
+| Adaptive gradient-based optimizers | 0.000 / 0.000 | 0.200 / 0.500 | `1904.09237`, `1412.6980` |
+| Neural architecture search | 0.000 / 0.000 | 0.000 / 0.000 | — |
+| Object detection | 0.000 / 0.000 | 0.100 / 0.250 | `1506.01497` |
+| Knowledge distillation | 0.000 / 0.000 | 0.100 / 0.250 | `1606.07947` |
+| Federated learning | 0.000 / 0.000 | 0.200 / 0.500 | `1602.05629`, `1908.07873` |
+| Normalization techniques | 0.100 / 0.250 | 0.300 / 0.750 | `1502.03167`, `1607.06450`, `1803.08494` |
+| Variational autoencoders | 0.000 / 0.000 | 0.200 / 0.500 | `1509.00519`, `1312.6114` |
+| Sparse mixture-of-experts | 0.000 / 0.000 | 0.300 / 0.750 | `1701.06538`, `2202.08906`, `2101.03961` |
+
+10/12 queries went from 0 hits to nonzero, with no regressions on the other 14 gold queries (full 26-query P@10/R@10/NDCG@10/MRR rose from 0.088/0.221/0.207/0.340 to 0.154/0.385/0.375/0.599, and the justifier decoy-discrimination gap rose from 7.897 to 8.044). The two queries that remain at 0 hits ("GANs for image synthesis" and "neural architecture search") have their canonical papers matched and injected into RRF, but those papers' combined RRF scores still fall short of the rank-10 cutoff — the same "old but significant papers rank poorly" dynamic described in `docs/LIMITATIONS.md`, just not fully overcome by a single rank-1 canonical injection for these two queries.
 
 ### RRF k sensitivity
 

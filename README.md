@@ -56,13 +56,13 @@ The harvested corpus spans the full arXiv taxonomy: Computer Science · Mathemat
 
 ## Evaluation
 
-RAGLR-A is evaluated against a 14-query gold set (8 CS/ML + 2 biology + 2 math + 2 physics) with hand-curated known-relevant `arxiv_id`s, run through the real pipeline at `top_k=10`. Highlights from the latest run:
+RAGLR-A is evaluated against a 26-query gold set (20 CS/ML + 2 biology + 2 math + 2 physics) with hand-curated known-relevant `arxiv_id`s, run through the real pipeline at `top_k=10`. Highlights from the latest run:
 
 | Metric | Result |
 |---|---|
-| Prefilter recall (keyword filter never drops a known-relevant paper) | 1.000 |
-| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.150 / 0.375 / 0.341 / 0.552 |
-| Justifier decoy-discrimination gap (top-k vs. random papers) | 7.91 / 10 |
+| Prefilter recall (keyword filter rarely drops a known-relevant paper) | 0.990 |
+| End-to-end Precision@10 / Recall@10 / NDCG@10 / MRR | 0.154 / 0.385 / 0.375 / 0.599 |
+| Justifier decoy-discrimination gap (top-k vs. random papers) | 8.04 / 10 |
 
 See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the gold query set, HyDE-vs-raw-query ablation results, and per-query breakdowns.
 
@@ -73,7 +73,7 @@ See **[docs/EVALUATION.md](docs/EVALUATION.md)** for the full methodology, the g
 - **Dense retrieval cold-start latency** — on the full 3.07M-paper corpus, the first query in a process pays a ~60-70s one-time cost for ChromaDB to load its HNSW index from disk, dominating total query latency for short-lived processes (e.g. the CLI)
 - **Qwen keyword prefilter can return empty** — for some specific, well-formed queries the model emits a literal `[]`, skipping the keyword-based search-space reduction for that query (the rest of the pipeline still runs correctly over the full corpus)
 - **Old foundational papers rank poorly** — decade-old vocabulary doesn't compete with modern phrasing on lexical (BM25) or semantic (dense) similarity
-- **Small gold query set** (14 queries, 4 `relevant_ids` each) — metrics are a noisy lower bound on true recall
+- **Small gold query set** (26 queries, 4 `relevant_ids` each) — metrics are a noisy lower bound on true recall
 - **Lightweight embedding model** (`all-MiniLM-L6-v2`) may underperform on notation-heavy math/physics queries
 - **BM25 tokenization** struggles with model names/acronyms (e.g. `GPT-4`, `BERT`) and math symbols
 - **No citation graph or co-authorship modeling** — ranking is purely lexical + semantic similarity
