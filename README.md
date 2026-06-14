@@ -30,6 +30,8 @@ Each query flows through the following stages:
 
 Every response also includes a `RetrievalTrace`: search-space reduction stats, latency breakdowns, and the keywords generated along the way.
 
+> **Note:** `top_k` (default 10) is a maximum, not a guarantee. The Reciprocal Rank Fusion step only fuses papers that appear in the dense and/or BM25 candidate lists, so the result count is capped by the size of the candidate set actually retrieved. This matters most when an academic field / arXiv subcategory filter is applied — a narrow subcategory may contain fewer than `top_k` papers matching the query, so fewer results are returned rather than padding the list with weaker matches.
+
 ### Interfaces
 - **Streamlit UI** — query input, progress tracking, optional academic field / arXiv subcategory filtering, and results display
 - **FastAPI REST server** — `/search` endpoint with interactive docs
